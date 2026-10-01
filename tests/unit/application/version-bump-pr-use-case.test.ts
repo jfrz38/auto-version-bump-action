@@ -114,6 +114,7 @@ describe('VersionBumpPrUseCase', () => {
     const result = await executeUseCase({ changelog: 'git-cliff' });
 
     expect(changelogGenerator.generate).toHaveBeenCalledWith({ cwd: tempDir, nextVersion: '1.2.4', targetTag: 'v1.2.4' });
+    expect(createChangelogGenerator).toHaveBeenCalledWith(expect.objectContaining({ value: 'git-cliff' }), 'token');
     expect(result.changedFiles).toBe('build.gradle.kts\nCHANGELOG.md');
     expect(gitRepository.checkoutBumpBranch).toHaveBeenCalledWith('develop', 'chore/bump-version-1.2.4', true);
     expect(githubRepository.createCommitOnBranch).toHaveBeenCalledWith(expect.objectContaining({ changedFiles: ['build.gradle.kts', 'CHANGELOG.md'] }));

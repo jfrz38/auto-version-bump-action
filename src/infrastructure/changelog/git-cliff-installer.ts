@@ -1,58 +1,50 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import * as github from '@actions/github';
 
 const TOOL_NAME = 'git-cliff';
-const VERSION = '2.13.1';
-const RELEASE_URL = `https://github.com/orhun/git-cliff/releases/download/v${VERSION}`;
+const GITHUB_OWNER = 'orhun';
+const GITHUB_REPOSITORY = 'git-cliff';
 
-interface GitCliffAsset {
-  archive: string;
-  checksum: string;
+interface GitCliffAssetTarget {
+  archiveSuffix: string;
   format: 'tar' | 'zip';
 }
 
 type LinuxLibc = 'gnu' | 'musl';
 
-const ASSETS: Record<string, GitCliffAsset> = {
+const ASSETS: Record<string, GitCliffAssetTarget> = {
   'darwin-arm64': {
-    archive: `git-cliff-${VERSION}-aarch64-apple-darwin.tar.gz`,
-    checksum: '21547ae4a0421164070ab75c2522864ea5565858a011fabc5f583061b20f1226',
+    archiveSuffix: 'aarch64-apple-darwin.tar.gz',
     format: 'tar',
   },
   'darwin-x64': {
-    archive: `git-cliff-${VERSION}-x86_64-apple-darwin.tar.gz`,
-    checksum: '6e60ae390d375cecb9d8008c49f0e724a8dfe40390b532ef5501e421d2cc8acb',
+    archiveSuffix: 'x86_64-apple-darwin.tar.gz',
     format: 'tar',
   },
   'linux-gnu-arm64': {
-    archive: `git-cliff-${VERSION}-aarch64-unknown-linux-gnu.tar.gz`,
-    checksum: '9619b7f0c584229f8a2331c1905afe88bd938bdc9102926c2073836a42f02455',
+    archiveSuffix: 'aarch64-unknown-linux-gnu.tar.gz',
     format: 'tar',
   },
   'linux-gnu-x64': {
-    archive: `git-cliff-${VERSION}-x86_64-unknown-linux-gnu.tar.gz`,
-    checksum: '9a1263f24e59a2f508c7b3d3283c9dea94a8bf697f96dbc18cc783cac6284546',
+    archiveSuffix: 'x86_64-unknown-linux-gnu.tar.gz',
     format: 'tar',
   },
   'linux-musl-arm64': {
-    archive: `git-cliff-${VERSION}-aarch64-unknown-linux-musl.tar.gz`,
-    checksum: '4054c124b926c117f3fa048939bc8be0a954f29f3b6f367627e8cb22c1971882',
+    archiveSuffix: 'aarch64-unknown-linux-musl.tar.gz',
     format: 'tar',
   },
   'linux-musl-x64': {
-    archive: `git-cliff-${VERSION}-x86_64-unknown-linux-musl.tar.gz`,
-    checksum: '200d2535da6d9703f3bcc8a4d159c3b55eacdb01cf2148c55b3eee9dd04d5249',
+    archiveSuffix: 'x86_64-unknown-linux-musl.tar.gz',
     format: 'tar',
   },
   'win32-arm64': {
-    archive: `git-cliff-${VERSION}-aarch64-pc-windows-msvc.zip`,
-    checksum: '03a623191fe575bc0024e2ebc61cc861cebd3ba84b93ff13b002c42e8248cd3f',
+    archiveSuffix: 'aarch64-pc-windows-msvc.zip',
     format: 'zip',
   },
   'win32-x64': {
-    archive: `git-cliff-${VERSION}-x86_64-pc-windows-msvc.zip`,
-    checksum: '3ae3a5549e85c7ad5b20192ebcfee4371269deca51255f6f2f2e051c6541f5ca',
+    archiveSuffix: 'x86_64-pc-windows-msvc.zip',
     format: 'zip',
   },
 };
@@ -63,6 +55,7 @@ export interface GitCliffExecutableProvider {
 
 export class GitCliffInstaller implements GitCliffExecutableProvider {
   constructor(
+    private readonly githubToken: string,
     private readonly platform = process.platform,
     private readonly architecture = process.arch,
     private readonly linuxLibc = detectLinuxLibc(platform),
@@ -75,30 +68,42 @@ export class GitCliffInstaller implements GitCliffExecutableProvider {
       throw new Error(`Unsupported platform for git-cliff: ${this.platform}-${this.architecture}.`);
     }
 
+    const release = await github.getOctokit(this.githubToken).rest.repos.getLatestRelease({
+      owner: GITHUB_OWNER,
+      repo: GITHUB_REPOSITORY,
+    });
+    const version = release.data.tag_name.replace(/^v/, '');
+    const archiveName = `git-cliff-${version}-${asset.archiveSuffix}`;
+    const releaseAsset = release.data.assets.find(({ name }) => name === archiveName);
+    if (!releaseAsset) {
+      throw new Error(`Latest git-cliff release ${release.data.tag_name} does not contain ${archiveName}.`);
+    }
+    const checksum = parseSha256Digest(releaseAsset.digest, archiveName);
+
     const toolCache = await import('@actions/tool-cache');
     const cacheArchitecture = this.platform === 'linux' ? `${this.architecture}-${this.linuxLibc}` : this.architecture;
-    const cachedDirectory = toolCache.find(TOOL_NAME, VERSION, cacheArchitecture);
+    const cachedDirectory = toolCache.find(TOOL_NAME, version, cacheArchitecture);
     let archivePath: string;
     if (cachedDirectory) {
-      archivePath = path.join(cachedDirectory, asset.archive);
+      archivePath = path.join(cachedDirectory, archiveName);
     } else {
-      const downloadPath = await toolCache.downloadTool(`${RELEASE_URL}/${asset.archive}`);
-      await this.assertChecksum(downloadPath, asset);
-      const installedDirectory = await toolCache.cacheFile(downloadPath, asset.archive, TOOL_NAME, VERSION, cacheArchitecture);
-      archivePath = path.join(installedDirectory, asset.archive);
+      const downloadPath = await toolCache.downloadTool(releaseAsset.browser_download_url);
+      await this.assertChecksum(downloadPath, archiveName, checksum);
+      const installedDirectory = await toolCache.cacheFile(downloadPath, archiveName, TOOL_NAME, version, cacheArchitecture);
+      archivePath = path.join(installedDirectory, archiveName);
     }
 
-    await this.assertChecksum(archivePath, asset);
+    await this.assertChecksum(archivePath, archiveName, checksum);
     const extractedDirectory = asset.format === 'zip'
       ? await toolCache.extractZip(archivePath)
       : await toolCache.extractTar(archivePath);
     return this.findExecutable(extractedDirectory);
   }
 
-  private async assertChecksum(downloadPath: string, asset: GitCliffAsset): Promise<void> {
+  private async assertChecksum(downloadPath: string, archiveName: string, expectedChecksum: string): Promise<void> {
     const checksum = createHash('sha256').update(await fs.readFile(downloadPath)).digest('hex');
-    if (checksum !== asset.checksum) {
-      throw new Error(`Checksum verification failed for ${asset.archive}.`);
+    if (checksum !== expectedChecksum) {
+      throw new Error(`Checksum verification failed for ${archiveName}.`);
     }
   }
 
@@ -120,6 +125,15 @@ export class GitCliffInstaller implements GitCliffExecutableProvider {
 
     throw new Error(`Downloaded git-cliff archive does not contain ${executableName}.`);
   }
+}
+
+function parseSha256Digest(digest: string | null, archiveName: string): string {
+  const match = /^sha256:([a-f0-9]{64})$/i.exec(digest ?? '');
+  if (!match) {
+    throw new Error(`Latest git-cliff release does not publish a SHA-256 digest for ${archiveName}.`);
+  }
+
+  return match[1].toLowerCase();
 }
 
 function detectLinuxLibc(platform: NodeJS.Platform): LinuxLibc | undefined {

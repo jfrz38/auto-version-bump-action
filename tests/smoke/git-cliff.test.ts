@@ -39,8 +39,10 @@ describe('git-cliff smoke', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }, 120_000);
 
-  it('creates and prepends releases with default and repository configuration', async () => {
-    const generator = new GitCliffChangelogGenerator(new GitCliffInstaller());
+  const smokeTest = process.env.GITHUB_TOKEN ? it : it.skip;
+
+  smokeTest('creates and prepends releases with default and repository configuration', async () => {
+    const generator = new GitCliffChangelogGenerator(new GitCliffInstaller(process.env.GITHUB_TOKEN ?? ''));
     await generator.generate({
       cwd: tempDir,
       nextVersion: '1.1.0',

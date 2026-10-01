@@ -100,7 +100,7 @@ If a bump branch already exists but there is no open pull request for it, the ac
 
 ## Changelog
 
-Set `changelog: git-cliff` to create or update `CHANGELOG.md` automatically. The action downloads git-cliff 2.13.1 for the current runner, verifies the release asset checksum, and caches the verified archive. The checksum is verified again before every extraction from the cache. No separate installation is required.
+Set `changelog: git-cliff` to create or update `CHANGELOG.md` automatically. The action downloads the latest stable git-cliff release for the current runner, verifies the SHA-256 digest published by GitHub for that release asset, and caches the verified archive by version. The digest is verified again before every extraction from the cache. No separate installation is required. Because git-cliff is resolved at runtime, a newly published release can change generated changelog output between action runs.
 
 git-cliff generates the release from commits after the latest tag on the checked-out base branch and labels it with `${tag-prefix}${next-version}`. Tags that only belong to unrelated branches are ignored. If `CHANGELOG.md` does not exist, the action creates it. If it already exists, the new release is prepended. The changelog is included with the version files and pre-commit artifacts in the same commit and pull request. Generation stops with a clear error rather than overwriting a `CHANGELOG.md` that already has uncommitted changes.
 

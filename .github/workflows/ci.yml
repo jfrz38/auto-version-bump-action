@@ -62,3 +62,5 @@ jobs:
 
       - name: Run git-cliff smoke test
         run: pnpm run test:smoke
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

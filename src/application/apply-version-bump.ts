@@ -30,7 +30,7 @@ export class ApplyVersionBump {
 
     changedAfterWrite.assertNotEmpty();
 
-    await this.generateChangelog.execute(config.changelog, cwd, plan);
+    await this.generateChangelog.execute(config.changelog, config.githubToken, cwd, plan);
     const changedAfterCommands = ChangedFiles.from(await this.preCommitCommandsRunner.run(cwd, config.preCommitCommands, baselineChangedFiles));
     changedAfterCommands.assertNotEmpty();
     return changedAfterCommands;
