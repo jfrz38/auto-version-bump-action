@@ -3,9 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TemplateRenderer } from '../../../src/application/template-renderer';
+import type { ChangelogGeneratorFactory } from '../../../src/application/generate-changelog';
 import { VersionBumpPrUseCase } from '../../../src/application/version-bump-pr-use-case';
 import { ActionConfig } from '../../../src/domain/config/action-config';
 import type { ActionConfigInput } from '../../../src/domain/config/action-config-input';
+import type { ChangelogGenerator } from '../../../src/domain/ports/changelog-generator';
 import type { CommandExecutor } from '../../../src/domain/ports/command-executor';
 import type { DefaultBranchProvider } from '../../../src/domain/ports/default-branch-provider';
 import type { GitPathResolver } from '../../../src/domain/ports/git-path-resolver';
@@ -15,6 +17,8 @@ import type { VersionStrategy } from '../../../src/domain/versioning/version-str
 
 describe('VersionBumpPrUseCase', () => {
   let commandExecutor: MockCommandExecutor;
+  let changelogGenerator: MockChangelogGenerator;
+  let createChangelogGenerator: ChangelogGeneratorFactory;
   let defaultBranchProvider: MockDefaultBranchProvider;
   let gitPathResolver: TestGitPathResolver;
   let gitRepository: MockGitRepository;
@@ -25,6 +29,8 @@ describe('VersionBumpPrUseCase', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'version-bump-action-use-case-'));
     fs.writeFileSync(path.join(tempDir, 'build.gradle.kts'), 'version = "1.2.3"\n');
     commandExecutor = new MockCommandExecutor();
+    changelogGenerator = new MockChangelogGenerator();
+    createChangelogGenerator = vi.fn<ChangelogGeneratorFactory>((strategy) => strategy.isEnabled() ? changelogGenerator : undefined);
     defaultBranchProvider = new MockDefaultBranchProvider();
     gitPathResolver = new TestGitPathResolver();
     gitRepository = new MockGitRepository();
@@ -47,7 +53,7 @@ describe('VersionBumpPrUseCase', () => {
       tag: 'v1.2.4',
     });
     expect(fs.readFileSync(path.join(tempDir, 'build.gradle.kts'), 'utf8')).toBe('version = "1.2.4"\n');
-    expect(gitRepository.checkoutBumpBranch).toHaveBeenCalledWith('develop', 'chore/bump-version-1.2.4');
+    expect(gitRepository.checkoutBumpBranch).toHaveBeenCalledWith('develop', 'chore/bump-version-1.2.4', false);
     expect(githubRepository.createCommitOnBranch).toHaveBeenCalledWith({
       baseBranch: 'develop',
       branch: 'chore/bump-version-1.2.4',
@@ -96,6 +102,42 @@ describe('VersionBumpPrUseCase', () => {
     expect(gitRepository.checkoutBumpBranch).not.toHaveBeenCalled();
     expect(githubRepository.createCommitOnBranch).not.toHaveBeenCalled();
     expect(githubRepository.createPullRequest).not.toHaveBeenCalled();
+    expect(createChangelogGenerator).not.toHaveBeenCalled();
+  });
+
+  it('generates a changelog in the bump commit when git-cliff is enabled', async () => {
+    changelogGenerator.generate.mockImplementation(async () => {
+      fs.writeFileSync(path.join(tempDir, 'CHANGELOG.md'), '# Changelog\n');
+    });
+    gitRepository.changedFiles = [[], ['build.gradle.kts', 'CHANGELOG.md']];
+
+    const result = await executeUseCase({ changelog: 'git-cliff' });
+
+    expect(changelogGenerator.generate).toHaveBeenCalledWith({ cwd: tempDir, nextVersion: '1.2.4', targetTag: 'v1.2.4' });
+    expect(result.changedFiles).toBe('build.gradle.kts\nCHANGELOG.md');
+    expect(gitRepository.checkoutBumpBranch).toHaveBeenCalledWith('develop', 'chore/bump-version-1.2.4', true);
+    expect(githubRepository.createCommitOnBranch).toHaveBeenCalledWith(expect.objectContaining({ changedFiles: ['build.gradle.kts', 'CHANGELOG.md'] }));
+  });
+
+  it('does not create a remote commit or pull request when changelog generation fails', async () => {
+    changelogGenerator.generate.mockRejectedValue(new Error('generation failed'));
+
+    await expect(executeUseCase({ changelog: 'git-cliff' })).rejects.toThrow('generation failed');
+
+    expect(githubRepository.createCommitOnBranch).not.toHaveBeenCalled();
+    expect(githubRepository.createPullRequest).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite an already dirty changelog', async () => {
+    gitRepository.changedFiles = [['CHANGELOG.md']];
+
+    await expect(executeUseCase({ changelog: 'git-cliff' })).rejects.toThrow(
+      'Cannot generate CHANGELOG.md because it already has uncommitted changes.',
+    );
+
+    expect(changelogGenerator.generate).not.toHaveBeenCalled();
+    expect(fs.readFileSync(path.join(tempDir, 'build.gradle.kts'), 'utf8')).toBe('version = "1.2.3"\n');
+    expect(githubRepository.createCommitOnBranch).not.toHaveBeenCalled();
   });
 
   it('fails when the tag already exists and the safeguard is enabled', async () => {
@@ -143,6 +185,7 @@ describe('VersionBumpPrUseCase', () => {
   async function executeUseCase(inputOverrides: Partial<ActionConfigInput> = {}) {
     const useCase = new VersionBumpPrUseCase({
       commandExecutor,
+      createChangelogGenerator,
       createGitHubRepository: vi.fn().mockReturnValue(githubRepository),
       createStrategy: (cwd, config) => new TestVersionStrategy(cwd, config.versionFile),
       defaultBranchProvider,
@@ -157,6 +200,10 @@ describe('VersionBumpPrUseCase', () => {
 
 class MockCommandExecutor implements CommandExecutor {
   readonly exec = vi.fn<CommandExecutor['exec']>().mockResolvedValue(undefined);
+}
+
+class MockChangelogGenerator implements ChangelogGenerator {
+  readonly generate = vi.fn<ChangelogGenerator['generate']>().mockResolvedValue(undefined);
 }
 
 class MockDefaultBranchProvider implements DefaultBranchProvider {
@@ -223,6 +270,7 @@ function baseInputs(): ActionConfigInput {
     baseBranch: 'develop',
     branchPrefix: 'chore/bump-version-',
     bump: 'patch',
+    changelog: '',
     commitMessage: 'Bump version to {version}',
     draft: 'true',
     failIfReleaseExists: 'true',

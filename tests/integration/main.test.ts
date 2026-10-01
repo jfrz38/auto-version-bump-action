@@ -26,13 +26,23 @@ const githubMock = vi.hoisted(() => ({
   getOctokit: vi.fn(),
 }));
 
+const changelogMock = vi.hoisted(() => {
+  const generate = vi.fn();
+  return {
+    createGenerator: vi.fn((strategy: { value: string }) => strategy.value === 'git-cliff' ? { generate } : undefined),
+    generate,
+  };
+});
+
 vi.mock('@actions/core', () => coreMock);
 vi.mock('@actions/exec', () => execMock);
 vi.mock('@actions/github', () => githubMock);
+vi.mock('../../src/infrastructure/changelog', () => ({ createChangelogGenerator: changelogMock.createGenerator }));
 
 describe('main action entrypoint', () => {
   let tempDir: string;
   let cwdSpy: ReturnType<typeof vi.spyOn>;
+  let inputs: Record<string, string>;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'version-bump-action-main-'));
@@ -75,15 +85,16 @@ describe('main action entrypoint', () => {
           return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
         }
 
-        return Promise.resolve({ stdout: ' M build.gradle.kts\0', stderr: '', exitCode: 0 });
+        const changelogStatus = fs.existsSync(path.join(tempDir, 'CHANGELOG.md')) ? '?? CHANGELOG.md\0' : '';
+        return Promise.resolve({ stdout: ` M build.gradle.kts\0${changelogStatus}`, stderr: '', exitCode: 0 });
       }
 
       return Promise.resolve({ stdout: '', stderr: '', exitCode: 0 });
     });
 
-    coreMock.getInput.mockImplementation((name: string) => {
-      const inputs: Record<string, string> = {
+    inputs = {
         bump: 'patch',
+        changelog: 'none',
         strategy: 'gradle-kts',
         'version-file': 'build.gradle.kts',
         'version-pattern': '',
@@ -100,9 +111,8 @@ describe('main action entrypoint', () => {
         'fail-if-tag-exists': 'true',
         'fail-if-release-exists': 'true',
         'overwrite-existing-branch': 'false',
-      };
-      return inputs[name] ?? '';
-    });
+    };
+    coreMock.getInput.mockImplementation((name: string) => inputs[name] ?? '');
   });
 
   afterEach(() => {
@@ -118,5 +128,19 @@ describe('main action entrypoint', () => {
     expect(result.nextVersion).toBe('1.2.4');
     expect(coreMock.setOutput).toHaveBeenCalledWith('next-version', '1.2.4');
     expect(coreMock.setOutput).toHaveBeenCalledWith('pr-url', 'https://github.com/jfrz38/demo/pull/1');
+  });
+
+  it('wires git-cliff generation into the committed changed files', async () => {
+    inputs.changelog = 'git-cliff';
+    changelogMock.generate.mockImplementation(async () => {
+      fs.writeFileSync(path.join(tempDir, 'CHANGELOG.md'), '# Changelog\n');
+    });
+    const { run } = await import('../../src/main');
+
+    const result = await run();
+
+    expect(changelogMock.generate).toHaveBeenCalledWith({ cwd: tempDir, nextVersion: '1.2.4', targetTag: 'v1.2.4' });
+    expect(result.changedFiles).toBe('build.gradle.kts\nCHANGELOG.md');
+    expect(coreMock.setOutput).toHaveBeenCalledWith('changed-files', 'build.gradle.kts\nCHANGELOG.md');
   });
 });

@@ -36,13 +36,15 @@
     "lint": "eslint .",
     "package": "pnpm run build",
     "test": "vitest run tests/unit tests/integration",
+    "test:smoke": "vitest run tests/smoke",
     "typecheck": "tsc --noEmit",
     "validate": "pnpm run lint && pnpm run typecheck && pnpm test && pnpm run build"
   },
   "dependencies": {
     "@actions/core": "3.0.1",
     "@actions/exec": "3.0.0",
-    "@actions/github": "9.1.1"
+    "@actions/github": "9.1.1",
+    "@actions/tool-cache": "4.0.0"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

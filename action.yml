@@ -18,6 +18,10 @@ inputs:
   version-replacement:
     description: 'Replacement template for strategy=regex. Use {version} for the next version.'
     required: false
+  changelog:
+    description: 'Changelog strategy: none or git-cliff'
+    required: false
+    default: 'none'
   base-branch:
     description: 'Base branch for the pull request. Defaults to the current checkout branch or repository default branch.'
     required: false
