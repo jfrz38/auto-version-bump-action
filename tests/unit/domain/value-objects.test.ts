@@ -12,7 +12,8 @@ describe('domain value objects', () => {
   it('validates strategy names', () => {
     expect(StrategyName.fromInput('npm').value).toBe('npm');
     expect(StrategyName.fromInput(' MAVEN ').value).toBe('maven');
+    expect(StrategyName.fromInput(' RUST ').value).toBe('rust');
     expect(StrategyName.fromInput('regex').isRegex()).toBe(true);
-    expect(() => StrategyName.fromInput('unknown')).toThrow('Expected gradle-kts, maven, npm, or regex');
+    expect(() => StrategyName.fromInput('unknown')).toThrow('Expected gradle-kts, maven, npm, rust, or regex');
   });
 });

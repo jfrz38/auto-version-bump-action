@@ -8,6 +8,7 @@ import { createStrategy } from '../../../src/infrastructure/strategies';
 import { MavenStrategy } from '../../../src/infrastructure/strategies/maven';
 import { NpmStrategy } from '../../../src/infrastructure/strategies/npm';
 import { RegexStrategy } from '../../../src/infrastructure/strategies/regex';
+import { RustStrategy } from '../../../src/infrastructure/strategies/rust';
 
 const execMock = vi.hoisted(() => ({
   exec: vi.fn(),
@@ -91,6 +92,63 @@ describe('version strategies', () => {
     await expect(strategy.readCurrentVersion()).rejects.toThrow('as XML');
 
     fs.writeFileSync(filePath, '<project><version>${revision}</version></project>');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('static MAJOR.MINOR.PATCH');
+  });
+
+  it('creates the rust strategy from configuration', () => {
+    const config = { strategy: { value: 'rust' }, versionFile: 'Cargo.toml' } as ActionConfig;
+
+    expect(createStrategy(tempDir, config)).toBeInstanceOf(RustStrategy);
+  });
+
+  it('reads and updates only the Rust package version', async () => {
+    const filePath = path.join(tempDir, 'Cargo.toml');
+    const original = `[workspace]
+members = []
+
+[package]
+name = "demo"
+version = '1.2.3' # keep this comment
+
+[package.metadata.release]
+version = "8.8.8"
+
+[dependencies]
+serde = { version = "9.9.9" }
+`;
+    fs.writeFileSync(filePath, original);
+
+    const strategy = new RustStrategy(tempDir, 'Cargo.toml');
+
+    expect(strategy.getPotentialChangedFiles()).toEqual([filePath, path.join(tempDir, 'Cargo.lock')]);
+    expect(await strategy.readCurrentVersion()).toBe('1.2.3');
+    expect(await strategy.writeNextVersion('1.2.4')).toEqual([filePath]);
+    expect(fs.readFileSync(filePath, 'utf8')).toBe(original.replace("version = '1.2.3'", "version = '1.2.4'"));
+    expect(execMock.exec).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing or workspace-inherited Rust package versions', async () => {
+    const filePath = path.join(tempDir, 'Cargo.toml');
+    const strategy = new RustStrategy(tempDir, 'Cargo.toml');
+
+    fs.writeFileSync(filePath, '[package]\nname = "demo"\n');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('Could not resolve [package].version');
+
+    fs.writeFileSync(filePath, '[package]\nname = "demo"\nversion.workspace = true\n');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('Workspace inheritance is not supported');
+  });
+
+  it('rejects malformed, ambiguous, or non-string Rust package versions', async () => {
+    const filePath = path.join(tempDir, 'Cargo.toml');
+    const strategy = new RustStrategy(tempDir, 'Cargo.toml');
+
+    fs.writeFileSync(filePath, '[package\nversion = "1.2.3"\n');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('as TOML');
+
+    fs.writeFileSync(filePath, '[package]\nversion = "1.2.3"\nversion = "1.2.4"\n');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('as TOML');
+
+    fs.writeFileSync(filePath, '[package]\nversion = 1.23\n');
     await expect(strategy.readCurrentVersion()).rejects.toThrow('static MAJOR.MINOR.PATCH');
   });
 

@@ -70,7 +70,7 @@ This creates or reuses a branch such as `chore/bump-version-1.2.4`, commits the 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
 | `bump` | Yes | | Version component to bump: `patch`, `minor`, or `major`. |
-| `strategy` | Yes | | Version file strategy: `gradle-kts`, `maven`, `npm`, or `regex`. |
+| `strategy` | Yes | | Version file strategy: `gradle-kts`, `maven`, `npm`, `rust`, or `regex`. |
 | `version-file` | Yes | | Path to the file that contains the version. |
 | `version-pattern` | For `regex` | | Regex with exactly one capture group containing the current version. |
 | `version-replacement` | For `regex` | | Replacement template. Use `{version}` for the next version. |
@@ -310,6 +310,30 @@ Parent, dependency, plugin, profile, and property versions are ignored. The stra
     version-file: pom.xml
 ```
 
+## Rust
+
+For `rust`, the action updates the string value assigned to `[package].version` in the configured `Cargo.toml`:
+
+```toml
+[package]
+name = "demo"
+version = "1.2.3"
+```
+
+```yaml
+- id: bump
+  uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: patch
+    strategy: rust
+    version-file: Cargo.toml
+    pre-commit-commands: cargo check
+```
+
+Dependency and package metadata versions are ignored. The strategy fails when `[package].version` is missing, duplicated, malformed, non-string, or inherited from a workspace. It preserves the rest of the file byte-for-byte and does not run Cargo or resolve workspace metadata.
+
+`Cargo.lock` is tracked as a potential changed file but is not modified directly. If the repository commits it, use `pre-commit-commands` to run a Cargo command such as `cargo check` so Cargo can keep the lockfile consistent with the updated package version.
+
 ## Regex
 
 Use `regex` for files that are not covered by a built-in strategy.
@@ -334,28 +358,6 @@ Example workflow step:
     version-pattern: 'releaseVersion=(\d+\.\d+\.\d+)'
     version-replacement: 'releaseVersion={version}'
 ```
-
-For example, to update a Rust `Cargo.toml` package version:
-
-```toml
-[package]
-name = "demo"
-version = "1.2.3"
-```
-
-```yaml
-- id: bump
-  uses: jfrz38/auto-version-bump-action@v0
-  with:
-    bump: patch
-    strategy: regex
-    version-file: Cargo.toml
-    version-pattern: '^version\s*=\s*"(\d+\.\d+\.\d+)"'
-    version-replacement: 'version = "{version}"'
-    pre-commit-commands: cargo check
-```
-
-If the repository commits `Cargo.lock`, run a Cargo command such as `cargo check` so Cargo can keep the lockfile consistent with the updated package version.
 
 ## Release flow
 
