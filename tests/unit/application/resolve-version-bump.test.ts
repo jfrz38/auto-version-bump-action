@@ -31,6 +31,14 @@ describe('ResolveVersionBump', () => {
       'Could not resolve base branch. Provide input "base-branch".',
     );
   });
+
+  it('rejects versions outside the domain model', async () => {
+    const strategy = createStrategyForVersion('1.2.3-beta.1');
+
+    await expect(new ResolveVersionBump(strategy, new MockDefaultBranchProvider('main')).execute(new ActionConfig(baseInputs()), '/workspace')).rejects.toThrow(
+      'Invalid SemVer version "1.2.3-beta.1"',
+    );
+  });
 });
 
 class MockDefaultBranchProvider implements DefaultBranchProvider {
@@ -42,11 +50,15 @@ class MockDefaultBranchProvider implements DefaultBranchProvider {
 }
 
 function createStrategy(): VersionStrategy {
-  return {
+  return createStrategyForVersion('1.2.3')();
+}
+
+function createStrategyForVersion(version: string): () => VersionStrategy {
+  return () => ({
     getPotentialChangedFiles: vi.fn().mockReturnValue(['/workspace/build.gradle.kts']),
-    readCurrentVersion: vi.fn().mockResolvedValue('1.2.3'),
+    readCurrentVersion: vi.fn().mockResolvedValue(version),
     writeNextVersion: vi.fn(),
-  };
+  });
 }
 
 function baseInputs(): ActionConfigInput {

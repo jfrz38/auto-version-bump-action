@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parse, type DocumentCstNode, type ElementCstNode } from '@xml-tools/parser';
 import type { VersionStrategy } from '../../domain/versioning/version-strategy';
 
-const SEMVER_PATTERN = /^(\s*)(\d+\.\d+\.\d+)(\s*)$/;
+const MAVEN_PROPERTY_REFERENCE_PATTERN = /\$\{[^}]+\}/;
 
 interface VersionLocation {
   end: number;
@@ -65,13 +65,13 @@ export class MavenStrategy implements VersionStrategy {
     }
 
     const innerContent = content.slice(contentStart + 1, contentEnd);
-    const match = SEMVER_PATTERN.exec(innerContent);
-    if (!match) {
-      throw new Error(`Could not resolve a static MAJOR.MINOR.PATCH Maven project version from ${this.filePath}.`);
+    const version = innerContent.trim();
+    if (!version || version.includes('<') || version.includes('>') || MAVEN_PROPERTY_REFERENCE_PATTERN.test(version)) {
+      throw new Error(`Could not resolve a static Maven project version from ${this.filePath}.`);
     }
 
-    const start = contentStart + 1 + match[1].length;
-    return { start, end: start + match[2].length, version: match[2] };
+    const start = contentStart + 1 + innerContent.indexOf(version);
+    return { start, end: start + version.length, version };
   }
 }
 

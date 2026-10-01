@@ -3,8 +3,6 @@ import path from 'node:path';
 import { parseTOML, type AST } from 'toml-eslint-parser';
 import type { VersionStrategy } from '../../domain/versioning/version-strategy';
 
-const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
-
 interface TomlEntry {
   node: AST.TOMLKeyValue;
   path: (string | number)[];
@@ -77,8 +75,8 @@ export class PythonStrategy implements VersionStrategy {
     }
 
     const value = versions[0].node.value;
-    if (value.type !== 'TOMLValue' || value.kind !== 'string' || value.multiline || !SEMVER_PATTERN.test(value.value)) {
-      throw new Error(`Could not resolve a static MAJOR.MINOR.PATCH Python version from ${this.filePath}.`);
+    if (value.type !== 'TOMLValue' || value.kind !== 'string' || value.multiline) {
+      throw new Error(`Could not resolve a static string Python version from ${this.filePath}.`);
     }
 
     const source = content.slice(value.range[0], value.range[1]);

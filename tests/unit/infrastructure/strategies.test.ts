@@ -47,6 +47,12 @@ describe('version strategies', () => {
     await expect(new GradleKtsStrategy(tempDir, 'build.gradle.kts').readCurrentVersion()).rejects.toThrow('multiple version assignments');
   });
 
+  it('leaves gradle-kts version semantics to the domain', async () => {
+    fs.writeFileSync(path.join(tempDir, 'build.gradle.kts'), 'version = "1.2.3-beta.1"\n');
+
+    await expect(new GradleKtsStrategy(tempDir, 'build.gradle.kts').readCurrentVersion()).resolves.toBe('1.2.3-beta.1');
+  });
+
   it('creates the maven strategy from configuration', () => {
     const config = { strategy: { value: 'maven' }, versionFile: 'pom.xml' } as ActionConfig;
 
@@ -93,7 +99,13 @@ describe('version strategies', () => {
     await expect(strategy.readCurrentVersion()).rejects.toThrow('as XML');
 
     fs.writeFileSync(filePath, '<project><version>${revision}</version></project>');
-    await expect(strategy.readCurrentVersion()).rejects.toThrow('static MAJOR.MINOR.PATCH');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('static Maven project version');
+  });
+
+  it('leaves Maven version semantics to the domain', async () => {
+    fs.writeFileSync(path.join(tempDir, 'pom.xml'), '<project><version>1.2.3-beta.1</version></project>');
+
+    await expect(new MavenStrategy(tempDir, 'pom.xml').readCurrentVersion()).resolves.toBe('1.2.3-beta.1');
   });
 
   it('creates the rust strategy from configuration', () => {
@@ -150,7 +162,13 @@ serde = { version = "9.9.9" }
     await expect(strategy.readCurrentVersion()).rejects.toThrow('as TOML');
 
     fs.writeFileSync(filePath, '[package]\nversion = 1.23\n');
-    await expect(strategy.readCurrentVersion()).rejects.toThrow('static MAJOR.MINOR.PATCH');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('static string [package].version');
+  });
+
+  it('leaves Rust version semantics to the domain', async () => {
+    fs.writeFileSync(path.join(tempDir, 'Cargo.toml'), '[package]\nversion = "1.2.3-beta.1"\n');
+
+    await expect(new RustStrategy(tempDir, 'Cargo.toml').readCurrentVersion()).resolves.toBe('1.2.3-beta.1');
   });
 
   it('creates the python strategy from configuration', () => {
@@ -219,7 +237,13 @@ python = "^3.13"
     await expect(strategy.readCurrentVersion()).rejects.toThrow('as TOML');
 
     fs.writeFileSync(filePath, '[project]\nversion = 1.23\n');
-    await expect(strategy.readCurrentVersion()).rejects.toThrow('static MAJOR.MINOR.PATCH');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('static string Python version');
+  });
+
+  it('leaves Python version semantics to the domain', async () => {
+    fs.writeFileSync(path.join(tempDir, 'pyproject.toml'), '[project]\nversion = "1.2.3-beta.1"\n');
+
+    await expect(new PythonStrategy(tempDir, 'pyproject.toml').readCurrentVersion()).resolves.toBe('1.2.3-beta.1');
   });
 
   it('updates package.json directly when package-lock.json is absent', async () => {
