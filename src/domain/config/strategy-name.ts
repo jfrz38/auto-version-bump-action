@@ -1,9 +1,10 @@
-export type StrategyNameValue = 'gradle-kts' | 'npm' | 'regex';
+export type StrategyNameValue = 'gradle-kts' | 'maven' | 'npm' | 'regex';
 
 const GRADLE_KTS = 'gradle-kts';
+const MAVEN = 'maven';
 const NPM = 'npm';
 const REGEX = 'regex';
-const STRATEGY_NAMES = new Set<string>([GRADLE_KTS, NPM, REGEX]);
+const STRATEGY_NAMES = new Set<string>([GRADLE_KTS, MAVEN, NPM, REGEX]);
 
 export class StrategyName {
   private constructor(readonly value: StrategyNameValue) {}
@@ -14,7 +15,7 @@ export class StrategyName {
       return new StrategyName(normalized as StrategyNameValue);
     }
 
-    throw new Error(`Invalid strategy "${value}". Expected gradle-kts, npm, or regex.`);
+    throw new Error(`Invalid strategy "${value}". Expected gradle-kts, maven, npm, or regex.`);
   }
 
   isRegex(): boolean {

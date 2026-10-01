@@ -70,7 +70,7 @@ This creates or reuses a branch such as `chore/bump-version-1.2.4`, commits the 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
 | `bump` | Yes | | Version component to bump: `patch`, `minor`, or `major`. |
-| `strategy` | Yes | | Version file strategy: `gradle-kts`, `npm`, or `regex`. |
+| `strategy` | Yes | | Version file strategy: `gradle-kts`, `maven`, `npm`, or `regex`. |
 | `version-file` | Yes | | Path to the file that contains the version. |
 | `version-pattern` | For `regex` | | Regex with exactly one capture group containing the current version. |
 | `version-replacement` | For `regex` | | Replacement template. Use `{version}` for the next version. |
@@ -288,6 +288,26 @@ jobs:
           base-branch: ${{ inputs.base_branch }}
           strategy: gradle-kts
           version-file: mockguard/build.gradle.kts
+```
+
+## Maven
+
+For `maven`, the action updates exactly one direct `<version>` child of the `<project>` root in the configured `pom.xml`:
+
+```xml
+<project>
+  <version>1.2.3</version>
+</project>
+```
+
+Parent, dependency, plugin, profile, and property versions are ignored. The strategy fails when the direct project version is missing, duplicated, malformed, or uses a property such as `${revision}`. It preserves the rest of the file byte-for-byte, does not resolve inherited versions, and does not run Maven.
+
+```yaml
+- uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: patch
+    strategy: maven
+    version-file: pom.xml
 ```
 
 ## Regex

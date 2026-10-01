@@ -2,7 +2,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ActionConfig } from '../../../src/domain/config/action-config';
 import { GradleKtsStrategy } from '../../../src/infrastructure/strategies/gradle-kts';
+import { createStrategy } from '../../../src/infrastructure/strategies';
+import { MavenStrategy } from '../../../src/infrastructure/strategies/maven';
 import { NpmStrategy } from '../../../src/infrastructure/strategies/npm';
 import { RegexStrategy } from '../../../src/infrastructure/strategies/regex';
 
@@ -40,6 +43,55 @@ describe('version strategies', () => {
     fs.writeFileSync(path.join(tempDir, 'build.gradle.kts'), 'version = "0.1.2"\nversion = "0.1.3"\n');
 
     await expect(new GradleKtsStrategy(tempDir, 'build.gradle.kts').readCurrentVersion()).rejects.toThrow('multiple version assignments');
+  });
+
+  it('creates the maven strategy from configuration', () => {
+    const config = { strategy: { value: 'maven' }, versionFile: 'pom.xml' } as ActionConfig;
+
+    expect(createStrategy(tempDir, config)).toBeInstanceOf(MavenStrategy);
+  });
+
+  it('reads and updates only the direct Maven project version', async () => {
+    const filePath = path.join(tempDir, 'pom.xml');
+    const original = `<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <parent><version>9.9.9</version></parent>
+  <version>  1.2.3  </version>
+  <properties><revision>8.8.8</revision></properties>
+  <dependencies><dependency><version>7.7.7</version></dependency></dependencies>
+</project>
+`;
+    fs.writeFileSync(filePath, original);
+
+    const strategy = new MavenStrategy(tempDir, 'pom.xml');
+
+    expect(strategy.getPotentialChangedFiles()).toEqual([filePath]);
+    expect(await strategy.readCurrentVersion()).toBe('1.2.3');
+    expect(await strategy.writeNextVersion('1.2.4')).toEqual([filePath]);
+    expect(fs.readFileSync(filePath, 'utf8')).toBe(original.replace('  1.2.3  ', '  1.2.4  '));
+    expect(execMock.exec).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing and ambiguous Maven project versions', async () => {
+    const filePath = path.join(tempDir, 'pom.xml');
+    fs.writeFileSync(filePath, '<project><parent><version>1.2.3</version></parent></project>');
+    const strategy = new MavenStrategy(tempDir, 'pom.xml');
+
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('direct <project><version>');
+
+    fs.writeFileSync(filePath, '<project><version>1.2.3</version><version>1.2.4</version></project>');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('multiple direct <project><version>');
+  });
+
+  it('rejects malformed or non-static Maven project versions', async () => {
+    const filePath = path.join(tempDir, 'pom.xml');
+    const strategy = new MavenStrategy(tempDir, 'pom.xml');
+
+    fs.writeFileSync(filePath, '<project><version>1.2.3</project>');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('as XML');
+
+    fs.writeFileSync(filePath, '<project><version>${revision}</version></project>');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('static MAJOR.MINOR.PATCH');
   });
 
   it('updates package.json directly when package-lock.json is absent', async () => {
