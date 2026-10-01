@@ -41,6 +41,7 @@ jobs:
           bump: ${{ inputs.bump }}
           strategy: npm
           version-file: package.json
+          changelog: git-cliff
 ```
 
 This creates or reuses a branch such as `chore/bump-version-1.2.4`, commits the version change through the GitHub API, and opens a draft pull request.
@@ -51,6 +52,7 @@ This creates or reuses a branch such as `chore/bump-version-1.2.4`, commits the 
 - Validates simple SemVer: `MAJOR.MINOR.PATCH`.
 - Calculates a `patch`, `minor`, or `major` bump.
 - Updates the version file.
+- Optionally generates `CHANGELOG.md` with git-cliff.
 - Fails if the target tag or GitHub Release already exists, unless disabled.
 - Creates `chore/bump-version-{next-version}` by default using the GitHub API.
 - Opens a GitHub pull request, draft by default.
@@ -72,6 +74,7 @@ This creates or reuses a branch such as `chore/bump-version-1.2.4`, commits the 
 | `version-file` | Yes | | Path to the file that contains the version. |
 | `version-pattern` | For `regex` | | Regex with exactly one capture group containing the current version. |
 | `version-replacement` | For `regex` | | Replacement template. Use `{version}` for the next version. |
+| `changelog` | No | `none` | Changelog strategy: `none` or `git-cliff`. |
 | `base-branch` | No | current/default branch | Base branch for the pull request. |
 | `branch-prefix` | No | `chore/bump-version-` | Prefix for the bump branch. |
 | `tag-prefix` | No | `v` | Prefix used for tag/release existence checks. |
@@ -94,6 +97,29 @@ Template inputs support:
 If a bump branch already exists but there is no open pull request for it, the action fails by default so it does not overwrite remote work accidentally. Set `overwrite-existing-branch: true` to replace that generated bump branch by updating the remote ref through the GitHub API.
 
 `pre-commit-commands` runs in the checked-out workspace after the version file is updated and before the action creates the bump commit. If any command exits with a non-zero status, the action fails before creating the branch commit or opening the pull request. Any files changed, created, or deleted by those commands are included in the same bump commit.
+
+## Changelog
+
+Set `changelog: git-cliff` to create or update `CHANGELOG.md` automatically. The action downloads the latest stable git-cliff release for the current runner, verifies the SHA-256 digest published by GitHub for that release asset, and caches the verified archive by version. The digest is verified again before every extraction from the cache. No separate installation is required. Because git-cliff is resolved at runtime, a newly published release can change generated changelog output between action runs.
+
+git-cliff generates the release from commits after the latest tag on the checked-out base branch and labels it with `${tag-prefix}${next-version}`. Tags that only belong to unrelated branches are ignored. If `CHANGELOG.md` does not exist, the action creates it. If it already exists, the new release is prepended. The changelog is included with the version files and pre-commit artifacts in the same commit and pull request. Generation stops with a clear error rather than overwriting a `CHANGELOG.md` that already has uncommitted changes.
+
+A `cliff.toml` file is optional. When one is present in the repository root, the action passes it explicitly to git-cliff. Otherwise, the action generates and uses the built-in defaults from the pinned git-cliff binary, which are oriented toward Conventional Commits. Global or parent-directory git-cliff configuration is never inherited, and no changelog configuration path needs to be passed to this action.
+
+Full commit history and tags are needed to determine the unreleased range. When git-cliff is enabled, the action fetches the selected base branch history and tags and unshallows the checkout when necessary. Setting `fetch-depth: 0` on `actions/checkout` is optional and can avoid that additional fetch. Self-hosted runners must allow downloads from GitHub Releases. The managed git-cliff binary supports Linux (glibc and musl), macOS, and Windows on x64 and arm64.
+
+```yaml
+- uses: actions/checkout@v4
+
+- uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: minor
+    strategy: npm
+    version-file: package.json
+    changelog: git-cliff
+```
+
+With the default `changelog: none`, no tool is downloaded and changelog behavior is disabled.
 
 ## Pre-Commit Command Environment
 

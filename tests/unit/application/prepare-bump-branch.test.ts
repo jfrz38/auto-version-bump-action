@@ -33,7 +33,20 @@ describe('PrepareBumpBranch', () => {
       remoteBranchSha: 'remote-branch-sha',
     });
 
-    expect(gitRepository.checkoutBumpBranch).toHaveBeenCalledWith('develop', 'chore/bump-version-1.2.4');
+    expect(gitRepository.checkoutBumpBranch).toHaveBeenCalledWith('develop', 'chore/bump-version-1.2.4', false);
+  });
+
+  it('requests full history when git-cliff is enabled', async () => {
+    const github = new MockGitHubRepository();
+    const gitRepository = new MockGitRepository();
+
+    await new PrepareBumpBranch(github, gitRepository, createStrategy('1.2.3')).execute(
+      new ActionConfig({ ...baseInputs(), changelog: 'git-cliff' }),
+      '/workspace',
+      plan(),
+    );
+
+    expect(gitRepository.checkoutBumpBranch).toHaveBeenCalledWith('develop', 'chore/bump-version-1.2.4', true);
   });
 
   it('fails when checkout changes the current version', async () => {
@@ -80,6 +93,7 @@ function baseInputs(): ActionConfigInput {
     baseBranch: 'develop',
     branchPrefix: 'chore/bump-version-',
     bump: 'patch',
+    changelog: '',
     commitMessage: 'Bump version to {version}',
     draft: 'true',
     failIfReleaseExists: 'true',

@@ -2,6 +2,7 @@ export interface ActionConfigInput {
   baseBranch: string;
   branchPrefix: string;
   bump: string;
+  changelog: string;
   commitMessage: string;
   draft: string;
   failIfReleaseExists: string;

@@ -1,5 +1,6 @@
 import type { ActionConfigInput } from './action-config-input';
 import { BooleanInput } from './boolean-input';
+import { ChangelogStrategy } from './changelog-strategy';
 import { PreCommitCommands } from './pre-commit-commands';
 import { StrategyName } from './strategy-name';
 import { Bump } from '../versioning/bump';
@@ -8,6 +9,7 @@ export class ActionConfig {
   readonly baseBranch: string;
   readonly branchPrefix: string;
   readonly bump: Bump;
+  readonly changelog: ChangelogStrategy;
   readonly commitMessage: string;
   readonly draft: boolean;
   readonly failIfReleaseExists: boolean;
@@ -27,6 +29,7 @@ export class ActionConfig {
     this.baseBranch = inputs.baseBranch.trim();
     this.branchPrefix = inputs.branchPrefix || 'chore/bump-version-';
     this.bump = Bump.fromInput(inputs.bump);
+    this.changelog = ChangelogStrategy.fromInput(inputs.changelog);
     this.commitMessage = inputs.commitMessage || 'Bump version to {version}';
     this.draft = BooleanInput.fromInput('draft', inputs.draft, true).value;
     this.failIfReleaseExists = BooleanInput.fromInput('fail-if-release-exists', inputs.failIfReleaseExists, true).value;
