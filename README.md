@@ -70,7 +70,7 @@ This creates or reuses a branch such as `chore/bump-version-1.2.4`, commits the 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
 | `bump` | Yes | | Version component to bump: `patch`, `minor`, or `major`. |
-| `strategy` | Yes | | Version file strategy: `gradle-kts`, `maven`, `npm`, `rust`, or `regex`. |
+| `strategy` | Yes | | Version file strategy: `gradle-kts`, `maven`, `npm`, `python`, `rust`, or `regex`. |
 | `version-file` | Yes | | Path to the file that contains the version. |
 | `version-pattern` | For `regex` | | Regex with exactly one capture group containing the current version. |
 | `version-replacement` | For `regex` | | Replacement template. Use `{version}` for the next version. |
@@ -177,10 +177,8 @@ For Python projects that use Poetry, install Poetry before this action or includ
 - uses: jfrz38/auto-version-bump-action@v0
   with:
     bump: patch
-    strategy: regex
+    strategy: python
     version-file: pyproject.toml
-    version-pattern: 'version = "(\d+\.\d+\.\d+)"'
-    version-replacement: 'version = "{version}"'
     pre-commit-commands: poetry build
 ```
 
@@ -333,6 +331,28 @@ version = "1.2.3"
 Dependency and package metadata versions are ignored. The strategy fails when `[package].version` is missing, duplicated, malformed, non-string, or inherited from a workspace. It preserves the rest of the file byte-for-byte and does not run Cargo or resolve workspace metadata.
 
 `Cargo.lock` is tracked as a potential changed file but is not modified directly. If the repository commits it, use `pre-commit-commands` to run a Cargo command such as `cargo check` so Cargo can keep the lockfile consistent with the updated package version.
+
+## Python
+
+For `python`, the action updates exactly one static version in the configured `pyproject.toml`. It supports either the standard `[project].version` field or Poetry's `[tool.poetry].version` field:
+
+```toml
+[project]
+name = "demo"
+version = "1.2.3"
+```
+
+```yaml
+- uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: patch
+    strategy: python
+    version-file: pyproject.toml
+```
+
+The strategy fails when both supported fields are present, neither is present, the value is malformed or non-string, or `version` is declared in `[project].dynamic`. It preserves the rest of the file byte-for-byte, does not update `poetry.lock`, and does not run Poetry or another build backend.
+
+Dynamic versions and versions sourced from custom files such as `_version.txt` depend on build-backend-specific configuration and are not resolved by this strategy. Use `regex` when the version source is a custom text file.
 
 ## Regex
 

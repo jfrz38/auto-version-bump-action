@@ -3,6 +3,7 @@ import type { VersionStrategy } from '../../domain/versioning/version-strategy';
 import { GradleKtsStrategy } from './gradle-kts';
 import { MavenStrategy } from './maven';
 import { NpmStrategy } from './npm';
+import { PythonStrategy } from './python';
 import { RegexStrategy } from './regex';
 import { RustStrategy } from './rust';
 
@@ -15,6 +16,9 @@ export function createStrategy(cwd: string, config: ActionConfig): VersionStrate
   }
   if (config.strategy.value === 'npm') {
     return new NpmStrategy(cwd, config.versionFile);
+  }
+  if (config.strategy.value === 'python') {
+    return new PythonStrategy(cwd, config.versionFile);
   }
   if (config.strategy.value === 'rust') {
     return new RustStrategy(cwd, config.versionFile);

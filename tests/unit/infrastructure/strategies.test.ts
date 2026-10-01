@@ -7,6 +7,7 @@ import { GradleKtsStrategy } from '../../../src/infrastructure/strategies/gradle
 import { createStrategy } from '../../../src/infrastructure/strategies';
 import { MavenStrategy } from '../../../src/infrastructure/strategies/maven';
 import { NpmStrategy } from '../../../src/infrastructure/strategies/npm';
+import { PythonStrategy } from '../../../src/infrastructure/strategies/python';
 import { RegexStrategy } from '../../../src/infrastructure/strategies/regex';
 import { RustStrategy } from '../../../src/infrastructure/strategies/rust';
 
@@ -149,6 +150,75 @@ serde = { version = "9.9.9" }
     await expect(strategy.readCurrentVersion()).rejects.toThrow('as TOML');
 
     fs.writeFileSync(filePath, '[package]\nversion = 1.23\n');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('static MAJOR.MINOR.PATCH');
+  });
+
+  it('creates the python strategy from configuration', () => {
+    const config = { strategy: { value: 'python' }, versionFile: 'pyproject.toml' } as ActionConfig;
+
+    expect(createStrategy(tempDir, config)).toBeInstanceOf(PythonStrategy);
+  });
+
+  it('reads and updates only the PEP 621 project version', async () => {
+    const filePath = path.join(tempDir, 'pyproject.toml');
+    const original = `[project]
+name = "demo"
+version = '1.2.3' # keep this comment
+
+[tool.release]
+version = "9.9.9"
+`;
+    fs.writeFileSync(filePath, original);
+
+    const strategy = new PythonStrategy(tempDir, 'pyproject.toml');
+
+    expect(strategy.getPotentialChangedFiles()).toEqual([filePath]);
+    expect(await strategy.readCurrentVersion()).toBe('1.2.3');
+    expect(await strategy.writeNextVersion('1.2.4')).toEqual([filePath]);
+    expect(fs.readFileSync(filePath, 'utf8')).toBe(original.replace("version = '1.2.3'", "version = '1.2.4'"));
+    expect(execMock.exec).not.toHaveBeenCalled();
+  });
+
+  it('reads and updates the Poetry project version', async () => {
+    const filePath = path.join(tempDir, 'pyproject.toml');
+    const original = `[tool.poetry]
+name = "demo"
+version = "1.2.3"
+
+[tool.poetry.dependencies]
+python = "^3.13"
+`;
+    fs.writeFileSync(filePath, original);
+
+    const strategy = new PythonStrategy(tempDir, 'pyproject.toml');
+
+    expect(await strategy.readCurrentVersion()).toBe('1.2.3');
+    await strategy.writeNextVersion('1.3.0');
+    expect(fs.readFileSync(filePath, 'utf8')).toBe(original.replace('version = "1.2.3"', 'version = "1.3.0"'));
+  });
+
+  it('rejects missing, competing, or dynamic Python versions', async () => {
+    const filePath = path.join(tempDir, 'pyproject.toml');
+    const strategy = new PythonStrategy(tempDir, 'pyproject.toml');
+
+    fs.writeFileSync(filePath, '[project]\nname = "demo"\n');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('Could not resolve [project].version or [tool.poetry].version');
+
+    fs.writeFileSync(filePath, '[project]\nversion = "1.2.3"\n\n[tool.poetry]\nversion = "1.2.4"\n');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('multiple Python version values');
+
+    fs.writeFileSync(filePath, '[project]\ndynamic = ["version"]\n');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('Dynamic version metadata is not supported');
+  });
+
+  it('rejects malformed or non-string Python versions', async () => {
+    const filePath = path.join(tempDir, 'pyproject.toml');
+    const strategy = new PythonStrategy(tempDir, 'pyproject.toml');
+
+    fs.writeFileSync(filePath, '[project\nversion = "1.2.3"\n');
+    await expect(strategy.readCurrentVersion()).rejects.toThrow('as TOML');
+
+    fs.writeFileSync(filePath, '[project]\nversion = 1.23\n');
     await expect(strategy.readCurrentVersion()).rejects.toThrow('static MAJOR.MINOR.PATCH');
   });
 
