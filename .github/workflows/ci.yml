@@ -37,10 +37,7 @@ jobs:
         run: make ci
 
   changelog-smoke:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository

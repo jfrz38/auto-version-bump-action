@@ -42,11 +42,13 @@ vi.mock('../../src/infrastructure/changelog', () => ({ createChangelogGenerator:
 describe('main action entrypoint', () => {
   let tempDir: string;
   let cwdSpy: ReturnType<typeof vi.spyOn>;
+  let platformSpy: ReturnType<typeof vi.spyOn>;
   let inputs: Record<string, string>;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'version-bump-action-main-'));
     cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+    platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('linux');
     fs.writeFileSync(path.join(tempDir, 'build.gradle.kts'), 'version = "1.2.3"\n');
 
     vi.resetModules();
@@ -117,7 +119,16 @@ describe('main action entrypoint', () => {
 
   afterEach(() => {
     cwdSpy.mockRestore();
+    platformSpy.mockRestore();
     fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('rejects non-Linux runners before reading inputs', async () => {
+    platformSpy.mockReturnValue('win32');
+    const { run } = await import('../../src/main');
+
+    await expect(run()).rejects.toThrow('Unsupported runner platform: win32. This action supports Linux runners only.');
+    expect(coreMock.getInput).not.toHaveBeenCalled();
   });
 
   it('reads action inputs and writes action outputs', async () => {
