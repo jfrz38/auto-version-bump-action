@@ -12,6 +12,8 @@ import { createStrategy } from './infrastructure/strategies';
 import { readInputs } from './inputs';
 
 export async function run(): Promise<ActionOutputs> {
+  assertSupportedPlatform(process.platform);
+
   const useCase = new VersionBumpPrUseCase({
     commandExecutor: new ActionsCommandExecutor(),
     createChangelogGenerator,
@@ -25,6 +27,12 @@ export async function run(): Promise<ActionOutputs> {
   const outputs = await useCase.execute(new ActionConfig(readInputs()), process.cwd());
   setOutputs(outputs);
   return outputs;
+}
+
+function assertSupportedPlatform(platform: NodeJS.Platform): void {
+  if (platform !== 'linux') {
+    throw new Error(`Unsupported runner platform: ${platform}. This action supports Linux runners only.`);
+  }
 }
 
 function setOutputs(outputs: ActionOutputs): void {

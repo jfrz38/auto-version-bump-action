@@ -22,7 +22,6 @@ const toolCacheMock = vi.hoisted(() => ({
   cacheFile: vi.fn(),
   downloadTool: vi.fn(),
   extractTar: vi.fn(),
-  extractZip: vi.fn(),
   find: vi.fn(),
 }));
 
@@ -101,19 +100,13 @@ describe('GitCliffInstaller', () => {
     expect(toolCacheMock.downloadTool).toHaveBeenCalledWith(`https://github.com/orhun/git-cliff/releases/download/v${VERSION}/${archive}`);
   });
 
-  it('selects and extracts the Windows zip asset', async () => {
-    const archive = `git-cliff-${VERSION}-x86_64-pc-windows-msvc.zip`;
-    setLatestRelease(archive);
-    fsMock.readdir.mockResolvedValue([{ isDirectory: () => false, name: 'git-cliff.exe' }]);
-    toolCacheMock.extractZip.mockResolvedValue('/extracted');
-
-    await new GitCliffInstaller('token', 'win32', 'x64').install();
-
-    expect(toolCacheMock.extractZip).toHaveBeenCalledWith(path.join('/tool-cache/git-cliff', archive));
+  it('rejects non-Linux platforms before querying GitHub', async () => {
+    await expect(new GitCliffInstaller('token', 'win32', 'x64').install()).rejects.toThrow('Unsupported platform for git-cliff: win32-x64.');
+    expect(githubMock.getOctokit).not.toHaveBeenCalled();
   });
 
-  it('rejects unsupported platforms before querying GitHub', async () => {
-    await expect(new GitCliffInstaller('token', 'freebsd', 'x64').install()).rejects.toThrow('Unsupported platform for git-cliff: freebsd-x64.');
+  it('rejects unsupported Linux architectures before querying GitHub', async () => {
+    await expect(new GitCliffInstaller('token', 'linux', 's390x', 'gnu').install()).rejects.toThrow('Unsupported platform for git-cliff: linux-s390x.');
     expect(githubMock.getOctokit).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,5 @@
 name: 'auto-version-bump-action'
-description: 'Bump a SemVer project version, push a branch, and open a draft pull request.'
+description: 'Bump a SemVer project version on Linux, push a branch, and open a draft pull request.'
 author: 'jfrz38'
 
 inputs:

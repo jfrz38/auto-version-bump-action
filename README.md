@@ -9,6 +9,8 @@ Reusable GitHub Action that bumps a simple SemVer version, creates a GitHub API 
 
 It is designed for release-preparation workflows where a maintainer reviews and merges the version bump before a separate release workflow creates tags, GitHub Releases, or publishes artifacts.
 
+The action supports Linux runners only. Workflows running on Windows or macOS fail before processing inputs or changing repository state.
+
 ## Quick start
 
 Use this action after `actions/checkout` and give the workflow permission to write repository contents and open a pull request.
@@ -106,7 +108,7 @@ git-cliff generates the release from commits after the latest tag on the checked
 
 A `cliff.toml` file is optional. When one is present in the repository root, the action passes it explicitly to git-cliff. Otherwise, the action generates and uses the built-in defaults from the pinned git-cliff binary, which are oriented toward Conventional Commits. Global or parent-directory git-cliff configuration is never inherited, and no changelog configuration path needs to be passed to this action.
 
-Full commit history and tags are needed to determine the unreleased range. When git-cliff is enabled, the action fetches the selected base branch history and tags and unshallows the checkout when necessary. Setting `fetch-depth: 0` on `actions/checkout` is optional and can avoid that additional fetch. Self-hosted runners must allow downloads from GitHub Releases. The managed git-cliff binary supports Linux (glibc and musl), macOS, and Windows on x64 and arm64.
+Full commit history and tags are needed to determine the unreleased range. When git-cliff is enabled, the action fetches the selected base branch history and tags and unshallows the checkout when necessary. Setting `fetch-depth: 0` on `actions/checkout` is optional and can avoid that additional fetch. Self-hosted runners must allow downloads from GitHub Releases. The managed git-cliff binary supports Linux (glibc and musl) on x64 and arm64.
 
 ```yaml
 - uses: actions/checkout@v4

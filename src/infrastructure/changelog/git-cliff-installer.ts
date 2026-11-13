@@ -9,43 +9,22 @@ const GITHUB_REPOSITORY = 'git-cliff';
 
 interface GitCliffAssetTarget {
   archiveSuffix: string;
-  format: 'tar' | 'zip';
 }
 
 type LinuxLibc = 'gnu' | 'musl';
 
 const ASSETS: Record<string, GitCliffAssetTarget> = {
-  'darwin-arm64': {
-    archiveSuffix: 'aarch64-apple-darwin.tar.gz',
-    format: 'tar',
-  },
-  'darwin-x64': {
-    archiveSuffix: 'x86_64-apple-darwin.tar.gz',
-    format: 'tar',
-  },
   'linux-gnu-arm64': {
     archiveSuffix: 'aarch64-unknown-linux-gnu.tar.gz',
-    format: 'tar',
   },
   'linux-gnu-x64': {
     archiveSuffix: 'x86_64-unknown-linux-gnu.tar.gz',
-    format: 'tar',
   },
   'linux-musl-arm64': {
     archiveSuffix: 'aarch64-unknown-linux-musl.tar.gz',
-    format: 'tar',
   },
   'linux-musl-x64': {
     archiveSuffix: 'x86_64-unknown-linux-musl.tar.gz',
-    format: 'tar',
-  },
-  'win32-arm64': {
-    archiveSuffix: 'aarch64-pc-windows-msvc.zip',
-    format: 'zip',
-  },
-  'win32-x64': {
-    archiveSuffix: 'x86_64-pc-windows-msvc.zip',
-    format: 'zip',
   },
 };
 
@@ -62,8 +41,11 @@ export class GitCliffInstaller implements GitCliffExecutableProvider {
   ) {}
 
   async install(): Promise<string> {
-    const platformKey = this.platform === 'linux' ? `${this.platform}-${this.linuxLibc}` : this.platform;
-    const asset = ASSETS[`${platformKey}-${this.architecture}`];
+    if (this.platform !== 'linux') {
+      throw new Error(`Unsupported platform for git-cliff: ${this.platform}-${this.architecture}.`);
+    }
+
+    const asset = ASSETS[`linux-${this.linuxLibc}-${this.architecture}`];
     if (!asset) {
       throw new Error(`Unsupported platform for git-cliff: ${this.platform}-${this.architecture}.`);
     }
@@ -81,7 +63,7 @@ export class GitCliffInstaller implements GitCliffExecutableProvider {
     const checksum = parseSha256Digest(releaseAsset.digest, archiveName);
 
     const toolCache = await import('@actions/tool-cache');
-    const cacheArchitecture = this.platform === 'linux' ? `${this.architecture}-${this.linuxLibc}` : this.architecture;
+    const cacheArchitecture = `${this.architecture}-${this.linuxLibc}`;
     const cachedDirectory = toolCache.find(TOOL_NAME, version, cacheArchitecture);
     let archivePath: string;
     if (cachedDirectory) {
@@ -94,9 +76,7 @@ export class GitCliffInstaller implements GitCliffExecutableProvider {
     }
 
     await this.assertChecksum(archivePath, archiveName, checksum);
-    const extractedDirectory = asset.format === 'zip'
-      ? await toolCache.extractZip(archivePath)
-      : await toolCache.extractTar(archivePath);
+    const extractedDirectory = await toolCache.extractTar(archivePath);
     return this.findExecutable(extractedDirectory);
   }
 
@@ -108,7 +88,7 @@ export class GitCliffInstaller implements GitCliffExecutableProvider {
   }
 
   private async findExecutable(directory: string): Promise<string> {
-    const executableName = this.platform === 'win32' ? 'git-cliff.exe' : 'git-cliff';
+    const executableName = 'git-cliff';
     for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
       const entryPath = path.join(directory, entry.name);
       if (entry.isDirectory()) {
