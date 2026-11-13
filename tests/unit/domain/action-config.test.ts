@@ -12,6 +12,7 @@ describe('ActionConfig', () => {
     });
 
     expect(config.strategy.value).toBe('regex');
+    expect(config.changelog.value).toBe('none');
     expect(config.bump.value).toBe('patch');
     expect(config.draft).toBe(true);
     expect(config.overwriteExistingBranch).toBe(false);
@@ -30,6 +31,17 @@ describe('ActionConfig', () => {
       'version-replacement',
     );
   });
+
+  it('normalizes supported changelog strategies', () => {
+    expect(new ActionConfig({ ...baseInputs(), changelog: '  GIT-CLIFF ' }).changelog.value).toBe('git-cliff');
+    expect(new ActionConfig({ ...baseInputs(), changelog: '' }).changelog.value).toBe('none');
+  });
+
+  it('rejects an unsupported changelog strategy', () => {
+    expect(() => new ActionConfig({ ...baseInputs(), changelog: 'custom' })).toThrow(
+      'Invalid changelog strategy "custom". Expected none or git-cliff.',
+    );
+  });
 });
 
 function baseInputs(): ActionConfigInput {
@@ -37,6 +49,7 @@ function baseInputs(): ActionConfigInput {
     baseBranch: 'develop',
     branchPrefix: '',
     bump: 'patch',
+    changelog: '',
     commitMessage: '',
     draft: '',
     failIfReleaseExists: '',

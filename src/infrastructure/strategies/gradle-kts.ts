@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { VersionStrategy } from '../../domain/versioning/version-strategy';
 
-const VERSION_ASSIGNMENT_PATTERN = /(^\s*version\s*=\s*")(\d+\.\d+\.\d+)(".*$)/gm;
+const VERSION_ASSIGNMENT_PATTERN = /(^\s*version\s*=\s*")([^"\r\n]+)(".*$)/gm;
 
 export class GradleKtsStrategy implements VersionStrategy {
   private readonly filePath: string;
@@ -20,7 +20,7 @@ export class GradleKtsStrategy implements VersionStrategy {
     const matches = [...content.matchAll(VERSION_ASSIGNMENT_PATTERN)];
 
     if (matches.length === 0) {
-      throw new Error(`Could not resolve a version assignment from ${this.filePath}. Expected version = "MAJOR.MINOR.PATCH".`);
+      throw new Error(`Could not resolve a string version assignment from ${this.filePath}.`);
     }
     if (matches.length > 1) {
       throw new Error(`Found multiple version assignments in ${this.filePath}. Refusing to choose one.`);

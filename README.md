@@ -9,6 +9,8 @@ Reusable GitHub Action that bumps a simple SemVer version, creates a GitHub API 
 
 It is designed for release-preparation workflows where a maintainer reviews and merges the version bump before a separate release workflow creates tags, GitHub Releases, or publishes artifacts.
 
+The action supports Linux runners only. Workflows running on Windows or macOS fail before processing inputs or changing repository state.
+
 ## Quick start
 
 Use this action after `actions/checkout` and give the workflow permission to write repository contents and open a pull request.
@@ -41,6 +43,7 @@ jobs:
           bump: ${{ inputs.bump }}
           strategy: npm
           version-file: package.json
+          changelog: git-cliff
 ```
 
 This creates or reuses a branch such as `chore/bump-version-1.2.4`, commits the version change through the GitHub API, and opens a draft pull request.
@@ -51,6 +54,7 @@ This creates or reuses a branch such as `chore/bump-version-1.2.4`, commits the 
 - Validates simple SemVer: `MAJOR.MINOR.PATCH`.
 - Calculates a `patch`, `minor`, or `major` bump.
 - Updates the version file.
+- Optionally generates `CHANGELOG.md` with git-cliff.
 - Fails if the target tag or GitHub Release already exists, unless disabled.
 - Creates `chore/bump-version-{next-version}` by default using the GitHub API.
 - Opens a GitHub pull request, draft by default.
@@ -68,10 +72,11 @@ This creates or reuses a branch such as `chore/bump-version-1.2.4`, commits the 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
 | `bump` | Yes | | Version component to bump: `patch`, `minor`, or `major`. |
-| `strategy` | Yes | | Version file strategy: `gradle-kts`, `npm`, or `regex`. |
+| `strategy` | Yes | | Version file strategy: `gradle-kts`, `maven`, `npm`, `python`, `rust`, or `regex`. |
 | `version-file` | Yes | | Path to the file that contains the version. |
 | `version-pattern` | For `regex` | | Regex with exactly one capture group containing the current version. |
 | `version-replacement` | For `regex` | | Replacement template. Use `{version}` for the next version. |
+| `changelog` | No | `none` | Changelog strategy: `none` or `git-cliff`. |
 | `base-branch` | No | current/default branch | Base branch for the pull request. |
 | `branch-prefix` | No | `chore/bump-version-` | Prefix for the bump branch. |
 | `tag-prefix` | No | `v` | Prefix used for tag/release existence checks. |
@@ -94,6 +99,29 @@ Template inputs support:
 If a bump branch already exists but there is no open pull request for it, the action fails by default so it does not overwrite remote work accidentally. Set `overwrite-existing-branch: true` to replace that generated bump branch by updating the remote ref through the GitHub API.
 
 `pre-commit-commands` runs in the checked-out workspace after the version file is updated and before the action creates the bump commit. If any command exits with a non-zero status, the action fails before creating the branch commit or opening the pull request. Any files changed, created, or deleted by those commands are included in the same bump commit.
+
+## Changelog
+
+Set `changelog: git-cliff` to create or update `CHANGELOG.md` automatically. The action downloads the latest stable git-cliff release for the current runner, verifies the SHA-256 digest published by GitHub for that release asset, and caches the verified archive by version. The digest is verified again before every extraction from the cache. No separate installation is required. Because git-cliff is resolved at runtime, a newly published release can change generated changelog output between action runs.
+
+git-cliff generates the release from commits after the latest tag on the checked-out base branch and labels it with `${tag-prefix}${next-version}`. Tags that only belong to unrelated branches are ignored. If `CHANGELOG.md` does not exist, the action creates it. If it already exists, the new release is prepended. The changelog is included with the version files and pre-commit artifacts in the same commit and pull request. Generation stops with a clear error rather than overwriting a `CHANGELOG.md` that already has uncommitted changes.
+
+A `cliff.toml` file is optional. When one is present in the repository root, the action passes it explicitly to git-cliff. Otherwise, the action generates and uses the built-in defaults from the pinned git-cliff binary, which are oriented toward Conventional Commits. Global or parent-directory git-cliff configuration is never inherited, and no changelog configuration path needs to be passed to this action.
+
+Full commit history and tags are needed to determine the unreleased range. When git-cliff is enabled, the action fetches the selected base branch history and tags and unshallows the checkout when necessary. Setting `fetch-depth: 0` on `actions/checkout` is optional and can avoid that additional fetch. Self-hosted runners must allow downloads from GitHub Releases. The managed git-cliff binary supports Linux (glibc and musl) on x64 and arm64.
+
+```yaml
+- uses: actions/checkout@v4
+
+- uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: minor
+    strategy: npm
+    version-file: package.json
+    changelog: git-cliff
+```
+
+With the default `changelog: none`, no tool is downloaded and changelog behavior is disabled.
 
 ## Pre-Commit Command Environment
 
@@ -151,10 +179,8 @@ For Python projects that use Poetry, install Poetry before this action or includ
 - uses: jfrz38/auto-version-bump-action@v0
   with:
     bump: patch
-    strategy: regex
+    strategy: python
     version-file: pyproject.toml
-    version-pattern: 'version = "(\d+\.\d+\.\d+)"'
-    version-replacement: 'version = "{version}"'
     pre-commit-commands: poetry build
 ```
 
@@ -264,6 +290,72 @@ jobs:
           version-file: mockguard/build.gradle.kts
 ```
 
+## Maven
+
+For `maven`, the action updates exactly one direct `<version>` child of the `<project>` root in the configured `pom.xml`:
+
+```xml
+<project>
+  <version>1.2.3</version>
+</project>
+```
+
+Parent, dependency, plugin, profile, and property versions are ignored. The strategy fails when the direct project version is missing, duplicated, malformed, or uses a property such as `${revision}`. It preserves the rest of the file byte-for-byte, does not resolve inherited versions, and does not run Maven.
+
+```yaml
+- uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: patch
+    strategy: maven
+    version-file: pom.xml
+```
+
+## Rust
+
+For `rust`, the action updates the string value assigned to `[package].version` in the configured `Cargo.toml`:
+
+```toml
+[package]
+name = "demo"
+version = "1.2.3"
+```
+
+```yaml
+- id: bump
+  uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: patch
+    strategy: rust
+    version-file: Cargo.toml
+    pre-commit-commands: cargo check
+```
+
+Dependency and package metadata versions are ignored. The strategy fails when `[package].version` is missing, duplicated, malformed, non-string, or inherited from a workspace. It preserves the rest of the file byte-for-byte and does not run Cargo or resolve workspace metadata.
+
+`Cargo.lock` is tracked as a potential changed file but is not modified directly. If the repository commits it, use `pre-commit-commands` to run a Cargo command such as `cargo check` so Cargo can keep the lockfile consistent with the updated package version.
+
+## Python
+
+For `python`, the action updates exactly one static version in the configured `pyproject.toml`. It supports either the standard `[project].version` field or Poetry's `[tool.poetry].version` field:
+
+```toml
+[project]
+name = "demo"
+version = "1.2.3"
+```
+
+```yaml
+- uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: patch
+    strategy: python
+    version-file: pyproject.toml
+```
+
+The strategy fails when both supported fields are present, neither is present, the value is malformed or non-string, or `version` is declared in `[project].dynamic`. It preserves the rest of the file byte-for-byte, does not update `poetry.lock`, and does not run Poetry or another build backend.
+
+Dynamic versions and versions sourced from custom files such as `_version.txt` depend on build-backend-specific configuration and are not resolved by this strategy. Use `regex` when the version source is a custom text file.
+
 ## Regex
 
 Use `regex` for files that are not covered by a built-in strategy.
@@ -288,28 +380,6 @@ Example workflow step:
     version-pattern: 'releaseVersion=(\d+\.\d+\.\d+)'
     version-replacement: 'releaseVersion={version}'
 ```
-
-For example, to update a Rust `Cargo.toml` package version:
-
-```toml
-[package]
-name = "demo"
-version = "1.2.3"
-```
-
-```yaml
-- id: bump
-  uses: jfrz38/auto-version-bump-action@v0
-  with:
-    bump: patch
-    strategy: regex
-    version-file: Cargo.toml
-    version-pattern: '^version\s*=\s*"(\d+\.\d+\.\d+)"'
-    version-replacement: 'version = "{version}"'
-    pre-commit-commands: cargo check
-```
-
-If the repository commits `Cargo.lock`, run a Cargo command such as `cargo check` so Cargo can keep the lockfile consistent with the updated package version.
 
 ## Release flow
 

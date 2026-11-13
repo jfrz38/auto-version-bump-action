@@ -8,6 +8,7 @@ export function readInputs(): ActionInputs {
     baseBranch: core.getInput('base-branch'),
     branchPrefix: core.getInput('branch-prefix'),
     bump: core.getInput('bump', { required: true }),
+    changelog: core.getInput('changelog'),
     commitMessage: core.getInput('commit-message'),
     draft: core.getInput('draft'),
     failIfReleaseExists: core.getInput('fail-if-release-exists'),

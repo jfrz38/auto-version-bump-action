@@ -8,6 +8,7 @@ import { type VersionStrategy } from '../domain/versioning/version-strategy';
 import { ApplyVersionBump } from './apply-version-bump';
 import { CreateVersionBumpPr } from './create-version-bump-pr';
 import { EnsureReleaseTargetIsAvailable } from './ensure-release-target-is-available';
+import { type ChangelogGeneratorFactory, GenerateChangelog } from './generate-changelog';
 import { PreCommitCommandsRunner } from './pre-commit-commands-runner';
 import { PrepareBumpBranch } from './prepare-bump-branch';
 import { ResolveVersionBump } from './resolve-version-bump';
@@ -26,6 +27,7 @@ export type VersionStrategyFactory = (cwd: string, config: ActionConfig) => Vers
 
 export interface VersionBumpPrUseCaseDependencies {
   commandExecutor: CommandExecutor;
+  createChangelogGenerator: ChangelogGeneratorFactory;
   createGitHubRepository: GitHubRepositoryFactory;
   createStrategy: VersionStrategyFactory;
   defaultBranchProvider: DefaultBranchProvider;
@@ -61,6 +63,7 @@ export class VersionBumpPrUseCase {
       this.dependencies.gitRepository,
       preCommitCommandsRunner,
       this.dependencies.gitPathResolver,
+      new GenerateChangelog(this.dependencies.createChangelogGenerator),
     ).execute(config, cwd, plan);
     const pullRequest = await new CreateVersionBumpPr(github, this.dependencies.renderer).execute(config, cwd, plan, changedFiles, preparedBranch.remoteBranchSha);
 

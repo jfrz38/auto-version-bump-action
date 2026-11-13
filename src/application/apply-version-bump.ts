@@ -5,6 +5,7 @@ import type { GitPathResolver } from '../domain/ports/git-path-resolver';
 import type { GitRepository } from '../domain/ports/git-repository';
 import { ChangedFiles } from '../domain/version-bump/changed-files';
 import type { VersionBumpPlan } from '../domain/version-bump/version-bump-plan';
+import { GenerateChangelog } from './generate-changelog';
 import { PreCommitCommandsRunner } from './pre-commit-commands-runner';
 import type { VersionStrategyFactory } from './version-bump-pr-use-case';
 
@@ -14,17 +15,22 @@ export class ApplyVersionBump {
     private readonly gitRepository: GitRepository,
     private readonly preCommitCommandsRunner: PreCommitCommandsRunner,
     private readonly gitPathResolver: GitPathResolver,
+    private readonly generateChangelog: GenerateChangelog,
   ) { }
 
   async execute(config: ActionConfig, cwd: string, plan: VersionBumpPlan): Promise<ChangedFiles> {
     const strategy = this.createStrategy(cwd, config);
     const beforeContents = await this.snapshotFiles(cwd, strategy.getPotentialChangedFiles());
     const baselineChangedFiles = await this.gitRepository.getChangedFiles();
+    if (config.changelog.isEnabled() && baselineChangedFiles.includes('CHANGELOG.md')) {
+      throw new Error('Cannot generate CHANGELOG.md because it already has uncommitted changes.');
+    }
     const changedFiles = ChangedFiles.from((await strategy.writeNextVersion(plan.nextVersionText)).map((filePath) => this.gitPathResolver.toGitPath(cwd, filePath)));
     const changedAfterWrite = ChangedFiles.from(await this.filterActuallyChangedFiles(cwd, changedFiles.values, beforeContents));
 
     changedAfterWrite.assertNotEmpty();
 
+    await this.generateChangelog.execute(config.changelog, config.githubToken, cwd, plan);
     const changedAfterCommands = ChangedFiles.from(await this.preCommitCommandsRunner.run(cwd, config.preCommitCommands, baselineChangedFiles));
     changedAfterCommands.assertNotEmpty();
     return changedAfterCommands;

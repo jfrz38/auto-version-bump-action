@@ -52,6 +52,7 @@ function baseInputs(): ActionConfigInput {
     baseBranch: 'develop',
     branchPrefix: 'chore/bump-version-',
     bump: 'patch',
+    changelog: '',
     commitMessage: 'Bump version to {version}',
     draft: 'true',
     failIfReleaseExists: 'true',

@@ -26,7 +26,7 @@ export class PrepareBumpBranch {
     const remoteBranchSha = await this.github.getBranchRefSha(plan.branch.name);
     plan.branch.assertCanUseRemoteState(remoteBranchSha, config.overwriteExistingBranch);
 
-    await this.gitRepository.checkoutBumpBranch(plan.baseBranch.name, plan.branch.name);
+    await this.gitRepository.checkoutBumpBranch(plan.baseBranch.name, plan.branch.name, config.changelog.isEnabled());
     await this.assertVersionDidNotChange(config, cwd, plan);
 
     return { remoteBranchSha };

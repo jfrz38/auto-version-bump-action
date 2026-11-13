@@ -1,6 +1,6 @@
 {
   "name": "version-bump-action",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "GitHub Action that bumps SemVer project versions and opens a pull request.",
   "license": "MIT",
@@ -36,23 +36,27 @@
     "lint": "eslint .",
     "package": "pnpm run build",
     "test": "vitest run tests/unit tests/integration",
+    "test:smoke": "vitest run tests/smoke",
     "typecheck": "tsc --noEmit",
     "validate": "pnpm run lint && pnpm run typecheck && pnpm test && pnpm run build"
   },
   "dependencies": {
     "@actions/core": "3.0.1",
     "@actions/exec": "3.0.0",
-    "@actions/github": "9.1.1"
+    "@actions/github": "9.1.1",
+    "@actions/tool-cache": "4.0.0",
+    "@xml-tools/parser": "1.0.12",
+    "toml-eslint-parser": "1.0.3"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@jfrz38/eslint-plugin-clean-architecture-highlighter": "0.1.1",
-    "@types/node": "26.2.0",
-    "@vitest/coverage-v8": "4.1.10",
+    "@types/node": "26.6.5",
+    "@vitest/coverage-v8": "4.1.11",
     "esbuild": "0.28.2",
-    "eslint": "10.8.1",
+    "eslint": "10.13.0",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.67.0",
-    "vitest": "4.1.10"
+    "typescript-eslint": "8.72.0",
+    "vitest": "4.1.11"
   }
 }

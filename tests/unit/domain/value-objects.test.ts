@@ -11,7 +11,10 @@ describe('domain value objects', () => {
 
   it('validates strategy names', () => {
     expect(StrategyName.fromInput('npm').value).toBe('npm');
+    expect(StrategyName.fromInput(' MAVEN ').value).toBe('maven');
+    expect(StrategyName.fromInput(' PYTHON ').value).toBe('python');
+    expect(StrategyName.fromInput(' RUST ').value).toBe('rust');
     expect(StrategyName.fromInput('regex').isRegex()).toBe(true);
-    expect(() => StrategyName.fromInput('maven')).toThrow('Invalid strategy');
+    expect(() => StrategyName.fromInput('unknown')).toThrow('Expected gradle-kts, maven, npm, python, rust, or regex');
   });
 });
