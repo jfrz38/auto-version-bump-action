@@ -1,19 +1,36 @@
 # Auto Version Bump Action
 
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/jfrz38/auto-version-bump-action/ci.yml)](https://github.com/jfrz38/auto-version-bump-action/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/jfrz38/auto-version-bump-action/ci.yml?label=CI)](https://github.com/jfrz38/auto-version-bump-action/actions/workflows/ci.yml)
 [![GitHub release](https://img.shields.io/github/v/release/jfrz38/auto-version-bump-action?display_name=tag)](https://github.com/jfrz38/auto-version-bump-action/releases)
-[![GitHub Marketplace](https://img.shields.io/badge/marketplace-check--version--change-blue?logo=githubactions)](https://github.com/marketplace/actions/auto-version-bump-action)
+[![GitHub Marketplace](https://img.shields.io/badge/Marketplace-auto--version--bump--action-blue?logo=githubactions)](https://github.com/marketplace/actions/auto-version-bump-action)
 [![License](https://img.shields.io/github/license/jfrz38/auto-version-bump-action)](LICENSE)
 
-Reusable GitHub Action that bumps a simple SemVer version, creates a GitHub API commit on a bump branch, and opens a draft pull request.
+**Bump versions, update changelogs, and open a review-ready pull request—without publishing a release.**
 
-It is designed for release-preparation workflows where a maintainer reviews and merges the version bump before a separate release workflow creates tags, GitHub Releases, or publishes artifacts.
+Auto Version Bump Action prepares SemVer releases behind an explicit review boundary. It updates the project version, optionally generates `CHANGELOG.md`, commits every resulting file to a dedicated branch through the GitHub API, and opens a draft pull request.
 
-The action supports Linux runners only. Workflows running on Windows or macOS fail before processing inputs or changing repository state.
+Use it when you want maintainers to review and merge release changes before a separate workflow creates tags, GitHub Releases, packages, or other artifacts.
+
+## Why use it?
+
+- **Multiple ecosystems:** npm, Gradle Kotlin DSL, Maven, Python, Rust, and custom text files.
+- **Review-first releases:** creates a bump branch and a draft pull request instead of publishing immediately.
+- **Changelog automation:** can install and run `git-cliff`, with SHA-256 verification of the downloaded archive.
+- **Project-specific validation:** runs optional commands after the version change and includes their modified files in the same commit.
+- **Safe repeat runs:** reuses an existing open pull request and does not overwrite an orphaned bump branch by default.
+- **Release guards:** can fail when the target tag or GitHub Release already exists.
+
+## Requirements
+
+- A Linux GitHub Actions runner. Windows and macOS runners fail before inputs are processed or repository state changes.
+- A version in simple SemVer format: `MAJOR.MINOR.PATCH`.
+- `contents: write` and `pull-requests: write` workflow permissions.
+- When using the default `GITHUB_TOKEN`, **Settings > Actions > General > Allow GitHub Actions to create and approve pull requests** enabled in the repository.
+- `actions/checkout` before this action.
 
 ## Quick start
 
-Use this action after `actions/checkout` and give the workflow permission to write repository contents and open a pull request.
+Create a workflow such as `.github/workflows/bump-version.yml`:
 
 ```yaml
 name: Bump Version
@@ -22,9 +39,14 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        type: choice
+        description: Version component to bump
         required: true
-        options: [patch, minor, major]
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
@@ -34,7 +56,7 @@ jobs:
   bump:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -46,261 +68,80 @@ jobs:
           changelog: git-cliff
 ```
 
-This creates or reuses a branch such as `chore/bump-version-1.2.4`, commits the version change through the GitHub API, and opens a draft pull request.
+If `package.json` contains version `1.2.3` and you select `patch`, the action:
 
-## What it does
+1. updates the version to `1.2.4`;
+2. creates or updates `CHANGELOG.md` with `git-cliff`;
+3. creates `chore/bump-version-1.2.4`;
+4. commits the changed files through the GitHub Git Data API; and
+5. opens a draft pull request targeting the checked-out branch.
 
-- Reads the current version from a supported project file.
-- Validates simple SemVer: `MAJOR.MINOR.PATCH`.
-- Calculates a `patch`, `minor`, or `major` bump.
-- Updates the version file.
-- Optionally generates `CHANGELOG.md` with git-cliff.
-- Fails if the target tag or GitHub Release already exists, unless disabled.
-- Creates `chore/bump-version-{next-version}` by default using the GitHub API.
-- Opens a GitHub pull request, draft by default.
-- Reuses an existing open PR for the same branch/base instead of creating a duplicate.
+The action returns the previous and next versions, target tag, branch, pull request URL, and changed file list as [outputs](#outputs).
 
-## What it does not do
+## Release workflow
 
-- It does not create a git tag.
-- It does not create a GitHub Release.
-- It does not publish packages or artifacts.
-- It does not merge the pull request.
+This action intentionally stops at the pull request:
 
-## Inputs
-
-| Input | Required | Default | Description |
-| --- | --- | --- | --- |
-| `bump` | Yes | | Version component to bump: `patch`, `minor`, or `major`. |
-| `strategy` | Yes | | Version file strategy: `gradle-kts`, `maven`, `npm`, `python`, `rust`, or `regex`. |
-| `version-file` | Yes | | Path to the file that contains the version. |
-| `version-pattern` | For `regex` | | Regex with exactly one capture group containing the current version. |
-| `version-replacement` | For `regex` | | Replacement template. Use `{version}` for the next version. |
-| `changelog` | No | `none` | Changelog strategy: `none` or `git-cliff`. |
-| `base-branch` | No | current/default branch | Base branch for the pull request. |
-| `branch-prefix` | No | `chore/bump-version-` | Prefix for the bump branch. |
-| `tag-prefix` | No | `v` | Prefix used for tag/release existence checks. |
-| `draft` | No | `true` | Whether to create the pull request as a draft. |
-| `github-token` | No | `${{ github.token }}` | Token used for checks, GitHub API commits, branch updates, and PR creation. |
-| `overwrite-existing-branch` | No | `false` | Overwrite an existing bump branch when no open pull request is found for it. |
-| `commit-message` | No | `Bump version to {version}` | Commit message template. |
-| `pre-commit-commands` | No | | Commands to run after the version bump and before committing changes. One command per line. |
-| `pr-title` | No | `Bump version to {version}` | Pull request title template. |
-| `pr-body` | No | `Bumps version from {current-version} to {next-version} using a {bump} release bump.` | Pull request body template. |
-| `fail-if-tag-exists` | No | `true` | Fail if `${tag-prefix}${next-version}` already exists as a tag. |
-| `fail-if-release-exists` | No | `true` | Fail if a GitHub Release already exists for the tag. |
-
-Template inputs support:
-
-- `{version}` and `{next-version}`
-- `{current-version}`
-- `{bump}`
-
-If a bump branch already exists but there is no open pull request for it, the action fails by default so it does not overwrite remote work accidentally. Set `overwrite-existing-branch: true` to replace that generated bump branch by updating the remote ref through the GitHub API.
-
-`pre-commit-commands` runs in the checked-out workspace after the version file is updated and before the action creates the bump commit. If any command exits with a non-zero status, the action fails before creating the branch commit or opening the pull request. Any files changed, created, or deleted by those commands are included in the same bump commit.
-
-## Changelog
-
-Set `changelog: git-cliff` to create or update `CHANGELOG.md` automatically. The action downloads the latest stable git-cliff release for the current runner, verifies the SHA-256 digest published by GitHub for that release asset, and caches the verified archive by version. The digest is verified again before every extraction from the cache. No separate installation is required. Because git-cliff is resolved at runtime, a newly published release can change generated changelog output between action runs.
-
-git-cliff generates the release from commits after the latest tag on the checked-out base branch and labels it with `${tag-prefix}${next-version}`. Tags that only belong to unrelated branches are ignored. If `CHANGELOG.md` does not exist, the action creates it. If it already exists, the new release is prepended. The changelog is included with the version files and pre-commit artifacts in the same commit and pull request. Generation stops with a clear error rather than overwriting a `CHANGELOG.md` that already has uncommitted changes.
-
-A `cliff.toml` file is optional. When one is present in the repository root, the action passes it explicitly to git-cliff. Otherwise, the action generates and uses the built-in defaults from the pinned git-cliff binary, which are oriented toward Conventional Commits. Global or parent-directory git-cliff configuration is never inherited, and no changelog configuration path needs to be passed to this action.
-
-Full commit history and tags are needed to determine the unreleased range. When git-cliff is enabled, the action fetches the selected base branch history and tags and unshallows the checkout when necessary. Setting `fetch-depth: 0` on `actions/checkout` is optional and can avoid that additional fetch. Self-hosted runners must allow downloads from GitHub Releases. The managed git-cliff binary supports Linux (glibc and musl) on x64 and arm64.
-
-```yaml
-- uses: actions/checkout@v4
-
-- uses: jfrz38/auto-version-bump-action@v0
-  with:
-    bump: minor
-    strategy: npm
-    version-file: package.json
-    changelog: git-cliff
+```text
+Run bump workflow → Review bump PR → Merge → Publish from a separate workflow
 ```
 
-With the default `changelog: none`, no tool is downloaded and changelog behavior is disabled.
+It does **not** create a git tag, create a GitHub Release, publish packages or artifacts, or merge the pull request. Keeping those operations in a separate workflow makes the release boundary explicit.
 
-## Pre-Commit Command Environment
+## Supported version strategies
 
-`pre-commit-commands` uses the binaries available in the current GitHub Actions job environment. This action does not install project-specific tools automatically.
+| Strategy | Version source | Behavior and limits |
+| --- | --- | --- |
+| `npm` | `package.json` | Updates the `version` field. If a same-directory `package-lock.json` exists, runs `npm version` to keep it synchronized. |
+| `gradle-kts` | Kotlin DSL build file | Updates exactly one string assignment such as `version = "1.2.3"`. |
+| `maven` | `pom.xml` | Updates exactly one direct `<version>` child of `<project>`. Inherited and property-based versions are not resolved. |
+| `python` | `pyproject.toml` | Updates one static `[project].version` or `[tool.poetry].version`. Dynamic versions are not supported. |
+| `rust` | `Cargo.toml` | Updates one static `[package].version`. Workspace-inherited versions are not supported. |
+| `regex` | Any text file | Replaces exactly one match using a pattern with exactly one capture group. |
 
-Prepare any required runtime, package manager, or build tool before this action runs. For example, `pnpm`, `poetry`, `make`, Java, Gradle, Rust, or Go may need setup steps depending on the runner image and the versions your project requires.
+All strategies validate the current value as simple SemVer before calculating a `patch`, `minor`, or `major` bump.
 
-For Node projects that use `pnpm`, prepare Node and enable Corepack before running the action:
-
-```yaml
-- uses: actions/checkout@v4
-  with:
-    fetch-depth: 0
-
-- uses: actions/setup-node@v4
-  with:
-    node-version: 22
-    cache: pnpm
-
-- run: corepack enable
-
-- run: pnpm install --frozen-lockfile
-
-- uses: jfrz38/auto-version-bump-action@v0
-  with:
-    bump: minor
-    strategy: npm
-    version-file: packages/cli/package.json
-    pre-commit-commands: make package-github-action
-```
-
-You can also include simple setup directly in `pre-commit-commands`. Use one command per line:
+### npm
 
 ```yaml
-- uses: jfrz38/auto-version-bump-action@v0
-  with:
-    bump: minor
-    strategy: npm
-    version-file: packages/cli/package.json
-    pre-commit-commands: |
-      corepack enable
-      pnpm install --frozen-lockfile
-      make package-github-action
-```
-
-For Python projects that use Poetry, install Poetry before this action or include the setup inline:
-
-```yaml
-- uses: actions/setup-python@v5
-  with:
-    python-version: "3.13"
-- name: Install Poetry
-  run: pip install poetry
-
 - uses: jfrz38/auto-version-bump-action@v0
   with:
     bump: patch
-    strategy: python
-    version-file: pyproject.toml
-    pre-commit-commands: poetry build
+    strategy: npm
+    version-file: package.json
 ```
 
-## Outputs
-
-| Output | Description |
-| --- | --- |
-| `current-version` | Version read before applying the bump. |
-| `next-version` | Version written by the action. |
-| `tag` | Tag name associated with the next version. |
-| `branch` | Branch pushed by the action. |
-| `pr-url` | Created or reused pull request URL. |
-| `changed-files` | Newline-separated list of files changed by the bump. |
-
-## Permissions
-
-The workflow using this action needs:
-
-```yaml
-permissions:
-  contents: write
-  pull-requests: write
-```
-
-Repository setting required: in **Settings > Actions > General**, enable **Allow GitHub Actions to create and approve pull requests**. Without this setting, the action can create the bump branch commit but cannot open the pull request.
-
-Use `actions/checkout` with the target base branch and `fetch-depth: 0`.
-
-The bump commit is created through the GitHub Git Data API using `github-token`. With the default `GITHUB_TOKEN`, GitHub creates the commit as `github-actions[bot]`, so it can appear as a verified GitHub Actions bot commit without configuring GPG or SSH signing keys in the consuming workflow.
-
-## npm
-
-For `package.json`, the action reads and updates the `version` field.
-
-Without a `package-lock.json`, it writes the next version directly to `package.json`.
-
-If a same-directory `package-lock.json` exists, the action runs:
+Without `package-lock.json`, the action writes the next version directly to `package.json`. When a same-directory lockfile exists, it runs:
 
 ```bash
 npm version <next-version> --no-git-tag-version --allow-same-version
 ```
 
-Example:
+### Gradle Kotlin DSL
 
-```yaml
-- uses: actions/checkout@v4
-  with:
-    ref: ${{ inputs.base_branch }}
-    fetch-depth: 0
-
-- id: bump
-  uses: jfrz38/auto-version-bump-action@v0
-  with:
-    bump: ${{ inputs.bump }}
-    base-branch: ${{ inputs.base_branch }}
-    strategy: npm
-    version-file: package.json
-```
-
-## Gradle Kotlin DSL
-
-For `gradle-kts`, the action updates exactly one Kotlin DSL version assignment in the configured file:
+The `gradle-kts` strategy updates exactly one assignment:
 
 ```kotlin
-version = "0.1.2"
+version = "1.2.3"
 ```
-
-It fails if no matching assignment exists or if the file contains multiple matching version assignments.
-
-Workflow:
 
 ```yaml
-name: Bump Version
-
-on:
-  workflow_dispatch:
-    inputs:
-      bump:
-        type: choice
-        required: true
-        options: [patch, minor, major]
-      base_branch:
-        type: choice
-        required: true
-        default: develop
-        options: [develop, main]
-
-permissions:
-  contents: write
-  pull-requests: write
-
-jobs:
-  bump:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.base_branch }}
-          fetch-depth: 0
-
-      - id: bump
-        uses: jfrz38/auto-version-bump-action@v0
-        with:
-          bump: ${{ inputs.bump }}
-          base-branch: ${{ inputs.base_branch }}
-          strategy: gradle-kts
-          version-file: mockguard/build.gradle.kts
+- uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: minor
+    strategy: gradle-kts
+    version-file: app/build.gradle.kts
 ```
 
-## Maven
+### Maven
 
-For `maven`, the action updates exactly one direct `<version>` child of the `<project>` root in the configured `pom.xml`:
+The `maven` strategy updates the direct project version while preserving the rest of the file:
 
 ```xml
 <project>
   <version>1.2.3</version>
 </project>
 ```
-
-Parent, dependency, plugin, profile, and property versions are ignored. The strategy fails when the direct project version is missing, duplicated, malformed, or uses a property such as `${revision}`. It preserves the rest of the file byte-for-byte, does not resolve inherited versions, and does not run Maven.
 
 ```yaml
 - uses: jfrz38/auto-version-bump-action@v0
@@ -310,33 +151,11 @@ Parent, dependency, plugin, profile, and property versions are ignored. The stra
     version-file: pom.xml
 ```
 
-## Rust
+Parent, dependency, plugin, and profile versions are ignored. A property-based project version such as `${revision}` is not supported and causes the action to fail. The action does not run Maven or resolve inherited versions.
 
-For `rust`, the action updates the string value assigned to `[package].version` in the configured `Cargo.toml`:
+### Python
 
-```toml
-[package]
-name = "demo"
-version = "1.2.3"
-```
-
-```yaml
-- id: bump
-  uses: jfrz38/auto-version-bump-action@v0
-  with:
-    bump: patch
-    strategy: rust
-    version-file: Cargo.toml
-    pre-commit-commands: cargo check
-```
-
-Dependency and package metadata versions are ignored. The strategy fails when `[package].version` is missing, duplicated, malformed, non-string, or inherited from a workspace. It preserves the rest of the file byte-for-byte and does not run Cargo or resolve workspace metadata.
-
-`Cargo.lock` is tracked as a potential changed file but is not modified directly. If the repository commits it, use `pre-commit-commands` to run a Cargo command such as `cargo check` so Cargo can keep the lockfile consistent with the updated package version.
-
-## Python
-
-For `python`, the action updates exactly one static version in the configured `pyproject.toml`. It supports either the standard `[project].version` field or Poetry's `[tool.poetry].version` field:
+The `python` strategy supports the standard project metadata and Poetry:
 
 ```toml
 [project]
@@ -352,27 +171,41 @@ version = "1.2.3"
     version-file: pyproject.toml
 ```
 
-The strategy fails when both supported fields are present, neither is present, the value is malformed or non-string, or `version` is declared in `[project].dynamic`. It preserves the rest of the file byte-for-byte, does not update `poetry.lock`, and does not run Poetry or another build backend.
+The action does not update `poetry.lock` or run a build backend. Use [`pre-commit-commands`](#run-project-specific-commands) when those steps are needed. Use `regex` for dynamic versions or custom version files.
 
-Dynamic versions and versions sourced from custom files such as `_version.txt` depend on build-backend-specific configuration and are not resolved by this strategy. Use `regex` when the version source is a custom text file.
+### Rust
 
-## Regex
+The `rust` strategy updates a static package version:
 
-Use `regex` for files that are not covered by a built-in strategy.
+```toml
+[package]
+name = "demo"
+version = "1.2.3"
+```
 
-`version-pattern` must match the text to replace and include exactly one capture group containing the current version. `version-replacement` replaces the whole match; put `{version}` where the next version should be written.
+```yaml
+- uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: patch
+    strategy: rust
+    version-file: Cargo.toml
+    pre-commit-commands: cargo check
+```
 
-Example file:
+The action tracks `Cargo.lock` as a potential changed file but does not modify it directly. Run an appropriate Cargo command when the repository commits its lockfile.
 
-```txt
+### Custom files with regex
+
+Use `regex` when no built-in strategy matches the version source. For this file:
+
+```text
 releaseVersion=1.2.3
 ```
 
-Example workflow step:
+configure:
 
 ```yaml
-- id: bump
-  uses: jfrz38/auto-version-bump-action@v0
+- uses: jfrz38/auto-version-bump-action@v0
   with:
     bump: minor
     strategy: regex
@@ -381,12 +214,157 @@ Example workflow step:
     version-replacement: 'releaseVersion={version}'
 ```
 
-## Release flow
+`version-pattern` must contain exactly one capture group with the current version. `version-replacement` replaces the complete match and must place `{version}` where the next version belongs.
 
-This action intentionally stops at the pull request. A separate workflow can create the tag and GitHub Release after the bump PR is merged into the release branch.
+## Generate a changelog
 
-That keeps the release boundary explicit:
+Set `changelog: git-cliff` to create or update `CHANGELOG.md`:
 
-1. Run this action manually.
-2. Review and merge the bump PR.
-3. Let a release workflow create `v{version}` from the merged branch.
+```yaml
+- uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: minor
+    strategy: npm
+    version-file: package.json
+    changelog: git-cliff
+```
+
+The action:
+
+- resolves the latest stable `git-cliff` release at runtime;
+- downloads the Linux x64 or arm64 archive for glibc or musl;
+- verifies the SHA-256 digest published with the GitHub release asset;
+- caches the verified archive by version and verifies it again before extraction;
+- generates commits after the latest tag reachable from the selected base branch; and
+- creates `CHANGELOG.md` or prepends the new release to the existing file.
+
+When the repository root contains `cliff.toml`, the action passes it explicitly to `git-cliff`. Otherwise, it uses the binary's built-in defaults, which are oriented toward Conventional Commits. Global and parent-directory configuration is not inherited.
+
+The selected base branch history and tags are fetched when needed. A checkout with `fetch-depth: 0` avoids that additional fetch. Self-hosted runners must allow downloads from GitHub Releases.
+
+With the default `changelog: none`, no changelog tool is downloaded or executed.
+
+## Run project-specific commands
+
+Use `pre-commit-commands` to regenerate lockfiles, build distributable files, or validate the changed version before the pull request is created:
+
+```yaml
+- uses: actions/checkout@v7
+  with:
+    fetch-depth: 0
+
+- uses: actions/setup-node@v7
+  with:
+    node-version: 22
+    cache: pnpm
+
+- run: corepack enable
+- run: pnpm install --frozen-lockfile
+
+- uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: minor
+    strategy: npm
+    version-file: packages/cli/package.json
+    pre-commit-commands: |
+      pnpm test
+      make package-github-action
+```
+
+Commands run one per line in the checked-out workspace after the version file is updated. The action uses tools already available in the job; it does not install project-specific runtimes or package managers.
+
+If a command exits with a non-zero status, the action stops before creating the branch commit or pull request. Files created, modified, or deleted by successful commands are included in the same commit.
+
+## Safe repeat runs
+
+The default branch name is `chore/bump-version-{next-version}`.
+
+- If an open pull request already exists for the same head and base branches, the action returns that pull request instead of creating a duplicate.
+- If the remote branch exists without an open pull request, the action fails rather than overwrite remote work.
+- Set `overwrite-existing-branch: true` only when that generated branch should be replaced through the GitHub API.
+- The action fails by default when `${tag-prefix}${next-version}` already exists as a tag or GitHub Release. Disable either check independently when needed.
+
+## Inputs
+
+| Input | Required | Default | Description |
+| --- | --- | --- | --- |
+| `bump` | Yes | — | Version component: `patch`, `minor`, or `major`. |
+| `strategy` | Yes | — | Version strategy: `gradle-kts`, `maven`, `npm`, `python`, `rust`, or `regex`. |
+| `version-file` | Yes | — | Path to the file containing the version. |
+| `version-pattern` | For `regex` | — | Regex with exactly one capture group containing the current version. |
+| `version-replacement` | For `regex` | — | Replacement for the complete match. Use `{version}` for the next version. |
+| `changelog` | No | `none` | Changelog strategy: `none` or `git-cliff`. |
+| `base-branch` | No | Current or default branch | Base branch for the pull request. |
+| `branch-prefix` | No | `chore/bump-version-` | Prefix for the generated branch. |
+| `tag-prefix` | No | `v` | Prefix used for tag and release existence checks. |
+| `draft` | No | `true` | Create the pull request as a draft. |
+| `github-token` | No | `${{ github.token }}` | Token for checks, GitHub API commits, branch updates, and pull requests. |
+| `overwrite-existing-branch` | No | `false` | Replace an existing bump branch when no open pull request is found. |
+| `commit-message` | No | `Bump version to {version}` | Commit message template. |
+| `pre-commit-commands` | No | — | Commands to run after the bump and before the commit, one per line. |
+| `pr-title` | No | `Bump version to {version}` | Pull request title template. |
+| `pr-body` | No | `Bumps version from {current-version} to {next-version} using a {bump} release bump.` | Pull request body template. |
+| `fail-if-tag-exists` | No | `true` | Fail when the target tag already exists. |
+| `fail-if-release-exists` | No | `true` | Fail when a GitHub Release already exists for the target tag. |
+
+The `commit-message`, `pr-title`, and `pr-body` templates support:
+
+- `{version}` and `{next-version}` for the calculated version;
+- `{current-version}` for the version before the bump; and
+- `{bump}` for `patch`, `minor`, or `major`.
+
+## Outputs
+
+Assign an `id` to the action step to use its outputs:
+
+```yaml
+- id: bump
+  uses: jfrz38/auto-version-bump-action@v0
+  with:
+    bump: patch
+    strategy: npm
+    version-file: package.json
+
+- run: echo "Review ${{ steps.bump.outputs.pr-url }}"
+```
+
+| Output | Description |
+| --- | --- |
+| `current-version` | Version read before applying the bump. |
+| `next-version` | Version written by the action. |
+| `tag` | Tag name associated with the next version. |
+| `branch` | Branch created or reused by the action. |
+| `pr-url` | URL of the created or reused pull request. |
+| `changed-files` | Newline-separated list of files changed by the bump. Empty when an existing pull request is reused. |
+
+## Permissions and commit identity
+
+The calling workflow needs:
+
+```yaml
+permissions:
+  contents: write
+  pull-requests: write
+```
+
+The action creates the bump commit through the GitHub Git Data API using `github-token`. With the default `GITHUB_TOKEN`, GitHub attributes the commit to `github-actions[bot]`; it can appear as a verified GitHub Actions bot commit without configuring GPG or SSH signing keys.
+
+Check out the branch that the pull request should target, or pass `base-branch` explicitly. Use `fetch-depth: 0` when generating a changelog or when full history is otherwise required by your project commands.
+
+## Limitations
+
+- Only Linux runners are supported.
+- Versions must use exactly `MAJOR.MINOR.PATCH`; prerelease and build metadata are not supported.
+- Each built-in strategy updates one specific version source rather than resolving every ecosystem-specific version mechanism.
+- `git-cliff` is resolved at runtime, so a newly published version can change generated output between action runs.
+- The action prepares a release pull request; publishing remains the responsibility of a separate workflow.
+
+## Support and contributing
+
+Use [GitHub Issues](https://github.com/jfrz38/auto-version-bump-action/issues) to report a bug or propose an enhancement. Pull requests are welcome; run `make check` before submitting changes.
+
+See [CHANGELOG.md](CHANGELOG.md) for notable project changes.
+
+## License
+
+This project is available under the [MIT License](LICENSE).
